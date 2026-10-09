@@ -1,0 +1,111 @@
+{
+  "description": "Tunable business rules. Defaults are sensible for the demo.",
+  "properties": {
+    "cost_split": {
+      "default": "equal",
+      "description": "How a group's shipping fee is shared: equally, or by each line's value",
+      "enum": [
+        "equal",
+        "proportional"
+      ],
+      "title": "Cost Split",
+      "type": "string"
+    },
+    "min_saving_per_member": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        }
+      ],
+      "default": "0.01",
+      "description": "Every group member must save at least this vs buying alone",
+      "title": "Min Saving Per Member"
+    },
+    "buy_now_marginal_threshold": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        }
+      ],
+      "default": "0.50",
+      "description": "Recommend buying when expected extra saving per person from waiting is below this",
+      "title": "Buy Now Marginal Threshold"
+    },
+    "order_processing_days": {
+      "default": 1,
+      "description": "Days reserved for approvals + payment before the order is placed",
+      "minimum": 0,
+      "title": "Order Processing Days",
+      "type": "integer"
+    },
+    "deadline_warning_days": {
+      "default": 1,
+      "description": "Recommend buying when this many days or fewer remain to order",
+      "minimum": 0,
+      "title": "Deadline Warning Days",
+      "type": "integer"
+    },
+    "low_stock_threshold": {
+      "default": 2,
+      "minimum": 0,
+      "title": "Low Stock Threshold",
+      "type": "integer"
+    },
+    "price_drop_percent": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        }
+      ],
+      "default": "5",
+      "title": "Price Drop Percent"
+    },
+    "expected_arrivals_per_day": {
+      "default": 0.5,
+      "description": "Expected new compatible requests per day (for wait-vs-buy)",
+      "minimum": 0,
+      "title": "Expected Arrivals Per Day",
+      "type": "number"
+    },
+    "typical_book_price": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        }
+      ],
+      "default": "25.00",
+      "title": "Typical Book Price"
+    },
+    "max_group_size": {
+      "default": 8,
+      "minimum": 2,
+      "title": "Max Group Size",
+      "type": "integer"
+    },
+    "exact_solver_max_requests": {
+      "default": 12,
+      "description": "Use the exact partition solver up to this many requests per pickup point",
+      "minimum": 2,
+      "title": "Exact Solver Max Requests",
+      "type": "integer"
+    }
+  },
+  "title": "EngineConfig",
+  "type": "object"
+}

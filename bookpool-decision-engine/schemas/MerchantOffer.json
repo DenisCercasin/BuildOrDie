@@ -1,0 +1,76 @@
+{
+  "description": "A purchasable offer for one book at one merchant. Supplied by Person 2.",
+  "properties": {
+    "merchant_id": {
+      "title": "Merchant Id",
+      "type": "string"
+    },
+    "book_id": {
+      "title": "Book Id",
+      "type": "string"
+    },
+    "price": {
+      "anyOf": [
+        {
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        }
+      ],
+      "title": "Price"
+    },
+    "in_stock": {
+      "default": true,
+      "title": "In Stock",
+      "type": "boolean"
+    },
+    "stock_qty": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "None = unknown / plenty",
+      "title": "Stock Qty"
+    },
+    "delivery_days": {
+      "description": "Merchant's estimated days from order to delivery",
+      "minimum": 0,
+      "title": "Delivery Days",
+      "type": "integer"
+    },
+    "fetched_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Fetched At"
+    },
+    "is_simulated": {
+      "default": false,
+      "title": "Is Simulated",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "merchant_id",
+    "book_id",
+    "price",
+    "delivery_days"
+  ],
+  "title": "MerchantOffer",
+  "type": "object"
+}
