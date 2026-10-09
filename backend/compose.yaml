@@ -1,0 +1,43 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: bookpool
+      POSTGRES_DB: bookpool
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set a private PostgreSQL password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bookpool -d bookpool"]
+      interval: 5s
+      retries: 10
+  backend:
+    build: .
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment: &backend_env
+      DATABASE_URL: postgresql+psycopg://bookpool:${POSTGRES_PASSWORD}@postgres:5432/bookpool
+      BOOKPOOL_SERVICE_API_KEY: ${BOOKPOOL_SERVICE_API_KEY:?Set a private team service key}
+      PAYMENT_MODE: ${PAYMENT_MODE:-mock}
+      REAP_API_KEY: ${REAP_API_KEY:-}
+      REAP_BASE_URL: ${REAP_BASE_URL:-https://sg.sandbox.api.reap.global}
+      REAP_VERSION: ${REAP_VERSION:-2025-02-14}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8000}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      retries: 5
+  worker:
+    build: .
+    command: ["python", "scripts/worker.py"]
+    environment:
+      <<: *backend_env
+      BACKEND_URL: http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+volumes:
+  postgres_data:
