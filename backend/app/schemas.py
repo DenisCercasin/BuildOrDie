@@ -50,6 +50,16 @@ class OfferIn(Payload):
     _aware = field_validator("delivery_at", "expires_at")(RequestIn.aware.__func__)
 
 
+class SearchStatusIn(Payload):
+    code: Literal["DEADLINE_TOO_SOON", "NO_MATCH"]
+    earliest_delivery_at: datetime | None = None
+
+    @field_validator("earliest_delivery_at")
+    @classmethod
+    def aware(cls, value):
+        return RequestIn.aware(value) if value is not None else value
+
+
 class Allocation(Payload):
     request_id: Id
     offer_id: Id

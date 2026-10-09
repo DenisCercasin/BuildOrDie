@@ -191,6 +191,7 @@ class GroupWorker:
                 )
                 matches = (await self.catalog.search(search_request)).matches
             cheapest = {}
+            rejected_delivery_dates = []
             for match in matches:
                 policy = (
                     next(
@@ -217,6 +218,7 @@ class GroupWorker:
                 )
                 delivery_at = datetime.combine(delivery_day, time(18), tzinfo=SGT)
                 if delivery_at > datetime.fromisoformat(request["latest_delivery_at"]):
+                    rejected_delivery_dates.append(delivery_at)
                     continue
                 body = {
                     "request_id": request["id"],
@@ -235,6 +237,18 @@ class GroupWorker:
                     else "merchant",
                 }
                 fresh.append(await self.api("POST", "/v1/offers", json=body))
+            if not fresh:
+                status = {"code": "NO_MATCH"}
+                if rejected_delivery_dates:
+                    status = {
+                        "code": "DEADLINE_TOO_SOON",
+                        "earliest_delivery_at": min(
+                            rejected_delivery_dates
+                        ).isoformat(),
+                    }
+                await self.api(
+                    "POST", f"/v1/requests/{request['id']}/search-status", json=status
+                )
         newest: dict[str, dict] = {}
         for offer in fresh:
             current = newest.get(offer["merchant"])

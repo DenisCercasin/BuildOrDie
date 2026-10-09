@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import time
+from datetime import datetime
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramAPIError, TelegramRetryAfter
@@ -8,8 +9,9 @@ from pydantic import ValidationError
 
 from bookpool_bot.backend import BackendClient, BackendError, MockBackendClient, NotFound
 from bookpool_bot.keyboards import proposal_actions
-from bookpool_bot.models import NotificationEvent
+from bookpool_bot.models import NotificationEvent, RequestStatus
 from bookpool_bot.presentation import proposal_text, request_line
+from bookpool_bot.utils import SGT
 
 log = logging.getLogger(__name__)
 
@@ -27,7 +29,44 @@ class NotificationDispatcher:
             await self.backend.acknowledge_event(event.event_id)
             return True
         try:
-            if event.event_type == "order_placed":
+            if event.event_type == "search_status":
+                request = await self.backend.get_book_request(
+                    event.telegram_user_id, event.request_id
+                )
+                deadline = (
+                    datetime.fromisoformat(event.payload["latest_delivery_at"])
+                    .astimezone(SGT)
+                    .date()
+                )
+                if (
+                    request.status not in {RequestStatus.SEARCHING, RequestStatus.WAITING}
+                    or request.latest_delivery_date != deadline
+                ):
+                    await self.backend.acknowledge_event(event.event_id)
+                    self.delivered.add(event.event_id)
+                    return True
+                if event.payload.get("code") == "DEADLINE_TOO_SOON" and event.payload.get(
+                    "earliest_delivery_at"
+                ):
+                    earliest = (
+                        datetime.fromisoformat(event.payload["earliest_delivery_at"])
+                        .astimezone(SGT)
+                        .date()
+                    )
+                    text = (
+                        f"I found {request.title}, but the earliest delivery estimate is "
+                        f"{earliest.isoformat()}, after your {deadline.isoformat()} pickup deadline. "
+                        "This request cannot form a group with the current delivery estimates. "
+                        "To allow a later date, cancel it under /myrequests and submit a new request with /new."
+                    )
+                else:
+                    text = (
+                        f"I couldn't find a purchasable match for {request.title} in the approved stores. "
+                        "Check the title or ISBN and format under /myrequests. "
+                        "I'll check the catalog again in five minutes."
+                    )
+                markup = None
+            elif event.event_type == "order_placed":
                 request = await self.backend.get_book_request(
                     event.telegram_user_id, event.request_id
                 )

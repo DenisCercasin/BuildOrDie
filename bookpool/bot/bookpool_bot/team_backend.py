@@ -328,10 +328,21 @@ class TeamBackendClient(BackendClient):
                 headers={"Idempotency-Key": idempotency_key},
                 json={"version": quote_version, "outcome": "success"},
             )
-            message = (
-                "Your simulated contribution is authorized. No money was charged. "
-                "BookPool will run a simulated group checkout when everyone is ready."
-            )
+            message = "Your simulated contribution is recorded. No card was charged. "
+            if raw.get("quote_id"):
+                if raw["purchaser_id"] == backend_user_id:
+                    message += (
+                        "You are the designated purchaser. Use /sandboxcard to enter the test card "
+                        "on Reap's hosted page. Once everyone confirms, you'll receive the Reap "
+                        "sandbox checkout approval link."
+                    )
+                else:
+                    message += (
+                        "The designated purchaser still needs to enroll the test card and approve "
+                        "the single Reap sandbox checkout."
+                    )
+            else:
+                message += "BookPool will simulate the group checkout when everyone is ready."
         else:
             raise Conflict(
                 "The connected backend accepts final approval or withdrawal only for this group."
@@ -359,6 +370,27 @@ class TeamBackendClient(BackendClient):
             if not page["events"]:
                 return []
             raw = page["events"][0]
+            if raw["kind"] == "REQUEST_SEARCH_STATUS":
+                payload = raw.get("payload") or {}
+                events = [
+                    NotificationEvent(
+                        event_id=f"{raw['id']}:{telegram_id}",
+                        event_type="search_status",
+                        telegram_user_id=telegram_id,
+                        request_id=payload["request_id"],
+                        occurred_at=datetime.fromisoformat(raw["created_at"]),
+                        payload=payload,
+                    )
+                    for telegram_id, backend_id in self.user_ids.items()
+                    if backend_id == payload.get("user_id")
+                ]
+                if not events:
+                    log.warning("No known Telegram recipient for search event %s", raw["id"])
+                    return []
+                self._active_id = raw["id"]
+                self._active_events = events
+                self._acked = set()
+                return events
             if raw["kind"] not in kinds or not raw.get("group_id"):
                 self.cursor = raw["id"]
                 self._save()

@@ -16,7 +16,7 @@ from .domain import (emit, ensure_ready, fail, fingerprint, future, group_view, 
                      individual_baseline, journal, void_holds)
 from .payments import ProviderError, ReapSandbox, money_minor
 from .schemas import (AttachEnrollmentIn, AuthorizeIn, EnrollmentIn, ExecuteIn, OfferIn,
-                      ProposalIn, QuoteIn, ReasonIn, RequestIn, UserIn, VersionIn)
+                      ProposalIn, QuoteIn, ReasonIn, RequestIn, SearchStatusIn, UserIn, VersionIn)
 
 
 def allocate(total, weights):
@@ -164,6 +164,24 @@ def create_app(settings=None, provider=None):
             s.add(offer)
             s.flush()
             return model_dict(offer)
+
+    @api.post("/v1/requests/{request_id}/search-status", tags=["Merchant Intelligence"])
+    def report_search_status(request_id: str, body: SearchStatusIn, _=Depends(service)):
+        with db.transaction(write=True) as s:
+            req = row(s, BookRequest, request_id, lock=True)
+            if req.status != "OPEN" or req.group_id:
+                return {"changed": False}
+            payload = {"request_id": req.id, "user_id": req.user_id,
+                       "latest_delivery_at": req.latest_delivery_at,
+                       **body.model_dump(mode="json")}
+            previous = s.scalar(select(Event).where(
+                Event.kind == "REQUEST_SEARCH_STATUS",
+                Event.payload["request_id"].as_string() == req.id,
+            ).order_by(Event.id.desc()).limit(1))
+            if previous and previous.payload == payload:
+                return {"changed": False}
+            emit(s, "REQUEST_SEARCH_STATUS", **payload)
+            return {"changed": True}
 
     @api.get("/v1/offers", tags=["Merchant Intelligence"])
     def list_offers(request_id: str | None = None, limit: int = Query(100, ge=1, le=500), _=Depends(service)):
