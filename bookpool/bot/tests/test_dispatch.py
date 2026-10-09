@@ -72,3 +72,30 @@ async def test_router_end_to_end_request():
         assert bot.session.make_request.await_count >= 5
     finally:
         await bot.session.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("purchaser", [True, False])
+async def test_checkout_blocked_explains_pending_card_without_payment_link(purchaser):
+    from bookpool_bot.models import NotificationEvent
+    from bookpool_bot.notifications import NotificationDispatcher
+
+    bot = AsyncMock()
+    backend = AsyncMock()
+    dispatcher = NotificationDispatcher(bot, backend)
+    event = NotificationEvent(
+        event_id="blocked:123",
+        event_type="checkout_blocked",
+        telegram_user_id=123,
+        request_id="r1",
+        proposal_id="g1",
+        occurred_at=datetime.now(),
+        payload={"is_purchaser": purchaser},
+    )
+    assert await dispatcher.deliver(event)
+    text = bot.send_message.call_args.args[1]
+    assert "No checkout or payment has been created" in text
+    assert ("keep that page open" in text) == purchaser
+    assert "https://" not in text
+    assert await dispatcher.deliver(event)
+    assert bot.send_message.await_count == 1

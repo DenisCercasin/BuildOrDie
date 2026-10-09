@@ -545,6 +545,17 @@ def create_app(settings=None, provider=None):
                 enrollment_result = reap.get_enrollment(enrollment_id)
                 owner = enrollment_result.get("owner", {})
                 if enrollment_result.get("status") != "ACTIVE" or owner.get("id") != purchaser_id or owner.get("type") != "CLIENT_REFERENCE":
+                    with db.transaction(write=True) as s:
+                        current = row(s, Group, group_id, lock=True)
+                        payload = {"version": body.version, "code": "ENROLLMENT_NOT_ACTIVE",
+                                   "enrollment_id": enrollment_id,
+                                   "enrollment_status": enrollment_result.get("status", "UNKNOWN")}
+                        previous = s.scalar(select(Event).where(
+                            Event.kind == "CHECKOUT_BLOCKED", Event.group_id == group_id
+                        ).order_by(Event.id.desc()).limit(1))
+                        if (current.state == "READY" and current.version == body.version
+                                and (not previous or previous.payload != payload)):
+                            emit(s, "CHECKOUT_BLOCKED", group_id, **payload)
                     fail("ENROLLMENT_NOT_ACTIVE", "Purchaser enrollment must be active and owned by the purchaser")
                 live = reap.get_quote(quote_id)
                 if not future(live["expiresAt"]):

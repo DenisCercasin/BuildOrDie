@@ -80,6 +80,22 @@ class NotificationDispatcher:
                 )
                 text = f"{heading}\n\n{request_line(request)}"
                 markup = None
+            elif event.event_type == "checkout_blocked":
+                text = (
+                    "Everyone has confirmed, but Reap has not activated the purchaser's card. "
+                    "No checkout or payment has been created. "
+                )
+                if event.payload.get("is_purchaser"):
+                    text += (
+                        "Card entry may be followed by OTP and passkey verification. "
+                        "If your Reap page already says setup is complete, keep that page open "
+                        "and tell the organiser: Reap's API still reports the card as inactive."
+                    )
+                else:
+                    text += (
+                        "The designated purchaser's card verification needs to be resolved first."
+                    )
+                markup = None
             elif event.event_type == "payment_approval_required":
                 if event.payload.get("is_purchaser") and event.payload.get("approval_url"):
                     text = (

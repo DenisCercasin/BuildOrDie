@@ -380,6 +380,7 @@ class TeamBackendClient(BackendClient):
             "ORDER_PLACED": "order_placed",
             "ORDER_FAILED": "payment_failed",
             "PAYMENT_APPROVAL_REQUIRED": "payment_approval_required",
+            "CHECKOUT_BLOCKED": "checkout_blocked",
         }
         for _ in range(limit):
             page = await self._request(
@@ -414,6 +415,13 @@ class TeamBackendClient(BackendClient):
                 self._save()
                 continue
             group = await self._request("GET", f"/v1/groups/{raw['group_id']}")
+            if raw["kind"] == "CHECKOUT_BLOCKED" and (
+                group["state"] != "READY"
+                or group["version"] != (raw.get("payload") or {}).get("version")
+            ):
+                self.cursor = raw["id"]
+                self._save()
+                continue
             event_type = kinds[raw["kind"]]
             if (
                 raw["kind"] == "REAP_QUOTE_READY"

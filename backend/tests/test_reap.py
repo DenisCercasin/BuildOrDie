@@ -359,3 +359,21 @@ def test_active_enrollment_is_not_replaced_by_retry(tmp_path):
                                'replace_enrollment_id': 'enr-test'})
     assert response.status_code == 200
     assert response.json()['status'] == 'ACTIVE'
+
+
+def test_pending_enrollment_notifies_once_and_never_opens_checkout(tmp_path):
+    client, provider = reap_client(tmp_path)
+    users, group = prepare(client, provider)
+    provider.get_enrollment = lambda ident: {
+        'id': ident, 'status': 'REQUIRES_ACTION',
+        'owner': {'type': 'CLIENT_REFERENCE', 'id': users[0]['id']},
+    }
+    for _ in range(3):
+        r = client.post(f'/v1/groups/{group["id"]}/execute', json={'version': group['version']})
+        assert r.status_code == 409
+        assert r.json()['detail']['code'] == 'ENROLLMENT_NOT_ACTIVE'
+    events = client.get('/v1/events', params={'limit': 500}).json()['events']
+    blocked = [e for e in events if e['kind'] == 'CHECKOUT_BLOCKED']
+    assert len(blocked) == 1
+    assert blocked[0]['payload']['enrollment_status'] == 'REQUIRES_ACTION'
+    assert not provider.checkouts
