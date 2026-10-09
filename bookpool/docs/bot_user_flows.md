@@ -1,0 +1,11 @@
+# Telegram user flows
+
+1. **Welcome:** `/start` explains BookPool, asks for NTU pickup confirmation, then displays Find a Book, My Requests, Active Groups, and How It Works. Conversations are private.
+2. **Request draft:** `/new` or a natural language book request starts the FSM. It extracts title/ISBN, format, budget, deadline, and savings if explicit. Missing fields are collected one at a time: book → format → latest pickup date → budget → optional minimum savings → review. The date is interpreted in Asia/Singapore. In mock mode, a title or ISBN is enough and budget is optional. The current team backend requires a title and budget.
+3. **Review:** the summary names defaults and states that no merchant check has occurred. The user can edit fields by button or natural language. Start Searching submits to backend; Cancel discards the draft. `/cancel` interrupts at any point. `/new` during a draft offers finish, discard, or save; `/resume` restores a session saved draft.
+4. **Requests:** `/myrequests` shows backend statuses and does not reveal another buyer's details. Mock mode permits edit or cancel while allowed. The current team backend permits cancel but does not support editing submitted requests.
+5. **Groups:** `/groups` shows backend quotes. Mock mode supports readiness, waiting, final approval, and decline. The current team backend supports final approval and withdrawal; withdrawal cancels the proposal for all participants. All actions fetch the current proposal, check user ownership and expiry, then submit a versioned idempotent backend decision.
+6. **Notifications:** the poller fetches structured events, renders them, sends in Telegram, and advances its cursor after successful delivery. The demo source uses in process fictional events. A changed quote version rejects old buttons; the team backend keeps the same proposal ID when revising a quote.
+7. **Completion:** only a backend event can announce order placement. In mock mode the text explicitly says demo mode.
+
+Temporary state lives in aiogram memory storage. Submitted requests, proposals, order and payment statuses live in the backend. The memory storage is replaceable with persistent FSM storage for deployment without changing handlers.
