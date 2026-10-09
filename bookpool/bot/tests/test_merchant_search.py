@@ -94,9 +94,10 @@ async def test_live_store_search_reports_partial_failure():
 
 
 @pytest.mark.asyncio
-async def test_start_searching_saves_request_then_shows_live_prices(state):
+async def test_start_searching_saves_request_without_catalog_dump(state):
     class LiveBackend(MockBackendClient):
         supports_live_search = True
+        show_catalog_on_submit = False
 
     class StubSearch:
         async def search(self, request):
@@ -121,4 +122,5 @@ async def test_start_searching_saves_request_then_shows_live_prices(state):
     assert callback.answered
     assert len(await backend.list_book_requests(123)) == 1
     assert "Request registered" in callback.message.sent[0][0]
-    assert "S$30.47" in callback.message.sent[1][0]
+    assert "No action is needed now" in callback.message.sent[0][0]
+    assert len(callback.message.sent) == 1

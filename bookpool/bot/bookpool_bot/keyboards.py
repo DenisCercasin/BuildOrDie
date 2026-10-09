@@ -67,8 +67,17 @@ def proposal_actions(
     approval: bool = False,
     decline_label: str = "Decline",
     approved: bool = False,
+    contribution_due: bool = False,
 ) -> InlineKeyboardMarkup:
     if approved:
+        if contribution_due:
+            return keyboard(
+                (("Confirm simulated contribution", f"p:contribute:{proposal_id}:{version}"),),
+                (
+                    (decline_label, f"p:decline:{proposal_id}:{version}"),
+                    ("View Details", f"p:details:{proposal_id}:{version}"),
+                ),
+            )
         return keyboard(
             ((decline_label, f"p:decline:{proposal_id}:{version}"),),
             (("View Details", f"p:details:{proposal_id}:{version}"),),

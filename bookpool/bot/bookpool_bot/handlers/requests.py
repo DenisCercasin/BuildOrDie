@@ -284,7 +284,10 @@ async def review_choice(
                 message = "Request updated. Previous quotes must be refreshed."
             else:
                 saved = await backend.create_book_request(callback.from_user.id, request)
-                message = "Request registered. We'll look for offers; no price or availability has been verified yet."
+                message = (
+                    "Request registered. BookPool is checking approved bookstores and will "
+                    "notify you if a compatible group quote becomes available. No action is needed now."
+                )
             await clear_active_draft(state)
             await callback.message.answer(
                 f"{message}\n\n{request_line(saved)}",
@@ -294,7 +297,7 @@ async def review_choice(
                     getattr(backend, "supports_live_search", False),
                 ),
             )
-            if getattr(backend, "supports_live_search", False):
+            if getattr(backend, "show_catalog_on_submit", False):
                 await callback.answer()
                 answered = True
                 await send_live_search(callback.message, saved, merchant_search)

@@ -34,6 +34,7 @@ class Decision(StrEnum):
     READY = "ready"
     WAIT = "wait"
     APPROVE = "approve"
+    CONTRIBUTE = "contribute"
     DECLINE = "decline"
 
 

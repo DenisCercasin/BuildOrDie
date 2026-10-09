@@ -2,6 +2,7 @@
 
 import json
 import logging
+import os
 from datetime import date, datetime, time
 from pathlib import Path
 
@@ -37,6 +38,8 @@ class TeamBackendClient(BackendClient):
     supports_update = False
     decline_cancels_group = True
     supports_live_search = True
+    show_catalog_on_submit = False
+    supports_contributions = True
 
     def __init__(self, base_url: str, api_key: str, state_path: str | Path):
         if not api_key:
@@ -76,6 +79,30 @@ class TeamBackendClient(BackendClient):
 
     async def close(self) -> None:
         await self.client.aclose()
+
+    async def start_sandbox_enrollment(self, telegram_user_id: int) -> str:
+        user_id = await self._backend_user_id(telegram_user_id)
+        health = await self._request("GET", "/health")
+        if health["payment_mode"] != "reap_sandbox":
+            raise Conflict("The backend is currently running simulated checkout only.")
+        groups = await self._request("GET", "/v1/groups", params={"limit": 500})
+        if not any(
+            group["purchaser_id"] == user_id and group["state"] in {"PROPOSED", "READY"}
+            for group in groups
+        ):
+            raise Conflict(
+                "Only the designated purchaser of an active group can set up the sandbox card."
+            )
+        result = await self._request(
+            "POST",
+            f"/v1/users/{user_id}/enrollments",
+            headers={"Idempotency-Key": f"telegram-sandbox-{user_id}"},
+            json={
+                "email": os.getenv("BOOKPOOL_PURCHASER_EMAIL", "bookpool.test@example.com"),
+                "return_url": health["public_base_url"].rstrip("/") + "/payment-return",
+            },
+        )
+        return (result.get("nextAction") or {}).get("url") or ""
 
     async def _request(self, method: str, path: str, **kwargs):
         try:
@@ -237,7 +264,7 @@ class TeamBackendClient(BackendClient):
             status=status,
             recommendation_reason=raw.get("reason"),
             payment_status=", ".join(sorted({p["payment_state"] for p in mine})),
-            is_estimate=True,
+            is_estimate=not bool(raw.get("quote_id")),
             book_titles=[p["title"] for p in mine],
             user_approved=all(p["approved_version"] == raw["version"] for p in mine),
         )
@@ -292,6 +319,19 @@ class TeamBackendClient(BackendClient):
                 json={"version": quote_version},
             )
             message = "You left this group. The backend cancelled the proposal for all participants so it can be rebuilt."
+        elif decision == Decision.CONTRIBUTE:
+            if not current.user_approved:
+                raise Conflict("Approve this group quote before confirming your contribution.")
+            raw = await self._request(
+                "POST",
+                f"/v1/groups/{proposal_id}/participants/{backend_user_id}/authorize",
+                headers={"Idempotency-Key": idempotency_key},
+                json={"version": quote_version, "outcome": "success"},
+            )
+            message = (
+                "Your simulated contribution is authorized. No money was charged. "
+                "BookPool will run a simulated group checkout when everyone is ready."
+            )
         else:
             raise Conflict(
                 "The connected backend accepts final approval or withdrawal only for this group."
@@ -305,7 +345,7 @@ class TeamBackendClient(BackendClient):
             return [event for event in self._active_events if event.event_id not in self._acked]
         kinds = {
             "PROPOSAL_CREATED": "final_approval_requested",
-            "REAP_QUOTE_READY": "quote_changed",
+            "REAP_QUOTE_READY": "final_approval_requested",
             "GROUP_EXPIRED": "proposal_expired",
             "GROUP_CANCELLED": "proposal_expired",
             "ORDER_PLACED": "order_placed",
@@ -324,21 +364,32 @@ class TeamBackendClient(BackendClient):
                 self._save()
                 continue
             group = await self._request("GET", f"/v1/groups/{raw['group_id']}")
+            event_type = kinds[raw["kind"]]
+            if (
+                raw["kind"] == "REAP_QUOTE_READY"
+                and (raw.get("payload") or {}).get("version", 0) > 2
+            ):
+                event_type = "quote_changed"
             events = []
             for telegram_user_id, backend_user_id in self.user_ids.items():
                 mine = [p for p in group["participants"] if p["user_id"] == backend_user_id]
                 if mine:
+                    payload = dict(raw.get("payload") or {})
+                    if raw["kind"] == "PAYMENT_APPROVAL_REQUIRED":
+                        payload["is_purchaser"] = backend_user_id == group["purchaser_id"]
+                        if payload["is_purchaser"]:
+                            payload["approval_url"] = (group.get("order") or {}).get("approval_url")
                     events.append(
                         NotificationEvent(
                             event_id=f"{raw['id']}:{telegram_user_id}",
-                            event_type=kinds[raw["kind"]],
+                            event_type=event_type,
                             telegram_user_id=telegram_user_id,
                             request_id=mine[0]["request_id"],
                             proposal_id=raw["group_id"],
                             occurred_at=datetime.fromisoformat(
                                 raw["created_at"].replace("Z", "+00:00")
                             ),
-                            payload=raw.get("payload") or {},
+                            payload=payload,
                         )
                     )
             if not events:

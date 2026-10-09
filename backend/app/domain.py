@@ -96,7 +96,7 @@ def individual_baseline(session, req):
 def refresh_ready(session, group, mode):
     ps = participants(session, group.id)
     ready = all(p.approved_version == group.version and
-                (mode != "mock" or p.payment_state == "AUTHORIZED") for p in ps)
+                p.payment_state == "AUTHORIZED" for p in ps)
     group.state = "READY" if ready else "PROPOSED"
 
 
@@ -171,7 +171,7 @@ def group_view(session, group):
 def order_view(order):
     data = model_dict(order)
     data.pop("checkout_payload")
-    data["simulated"] = True
+    data["simulated"] = order.provider == "mock"
     return data
 
 
@@ -186,7 +186,7 @@ def ensure_ready(session, group, requested, mode):
     open_group(group)
     refresh_ready(session, group, mode)
     if group.state != "READY":
-        fail("COMMITMENTS_MISSING", "Every participant must approve; mock contributions must be authorized")
+        fail("COMMITMENTS_MISSING", "Every participant must approve and confirm their simulated contribution")
     for p in participants(session, group.id):
         req = row(session, BookRequest, p.request_id)
         offer = row(session, Offer, p.offer_id)

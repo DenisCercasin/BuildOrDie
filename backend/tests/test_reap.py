@@ -64,16 +64,15 @@ def prepare(client, provider):
     response = client.post(f'/v1/groups/{group["id"]}/reap-quote', json={"version": 1, "email": "demo@example.invalid"})
     assert response.status_code == 200, response.text
     group = response.json()["group"]
-    approve_all(client, users, group, authorize=False)
+    approve_all(client, users, group, authorize=True)
     return users, group
 
 
-def test_reap_hosted_approval_and_polling_no_pooled_collection(tmp_path):
+def test_reap_hosted_approval_after_simulated_contributions(tmp_path):
     client, provider = reap_client(tmp_path)
     users, group = prepare(client, provider)
     assert group["version"] == 2
-    assert client.post(f'/v1/groups/{group["id"]}/participants/{users[0]["id"]}/authorize',
-                       json={"version": 2}).status_code == 409
+    assert all(p["payment_state"] == "AUTHORIZED" for p in client.get(f'/v1/groups/{group["id"]}').json()["participants"])
     order = client.post(f'/v1/groups/{group["id"]}/execute', json={"version": 2}).json()
     assert order["state"] == "AWAITING_PAYMENT_APPROVAL"
     assert order["approval_url"].startswith("https://")
@@ -82,7 +81,7 @@ def test_reap_hosted_approval_and_polling_no_pooled_collection(tmp_path):
     confirmed = client.post(f'/v1/orders/{order["id"]}/reconcile').json()
     assert confirmed["state"] == "ORDERED"
     assert confirmed["merchant_order_id"] == "merchant-test"
-    assert client.get("/v1/payments").json() == []
+    assert len([p for p in client.get("/v1/payments").json() if p["kind"] == "AUTHORIZE"]) == 3
     assert all(p["payment_state"] == "NOT_COLLECTED" for p in client.get(f'/v1/groups/{group["id"]}').json()["participants"])
     assert client.post(f'/v1/orders/{order["id"]}/refund', json={"reason": "Request review"}).json()["state"] == "REFUND_REQUESTED"
 

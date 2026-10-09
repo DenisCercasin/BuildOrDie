@@ -76,7 +76,8 @@ def create_app(settings=None, provider=None):
     def health():
         with db.transaction() as s:
             s.execute(text("SELECT 1"))
-        return {"status": "ok", "payment_mode": settings.payment_mode, "sandbox_only": True}
+        return {"status": "ok", "payment_mode": settings.payment_mode, "sandbox_only": True,
+                "public_base_url": settings.public_base_url}
 
     @api.get("/", response_class=HTMLResponse, include_in_schema=False)
     def home():
@@ -200,7 +201,8 @@ def create_app(settings=None, provider=None):
             s.add(Participant(group_id=group.id, request_id=req.id, user_id=req.user_id,
                               offer_id=offer.id, amount_minor=a.amount_minor))
         s.flush()
-        emit(s, "PROPOSAL_CREATED", group.id, version=group.version, reason=body.reason)
+        if settings.payment_mode == "mock":
+            emit(s, "PROPOSAL_CREATED", group.id, version=group.version, reason=body.reason)
         return group_view(s, group)
 
     @api.post("/v1/groups", tags=["Groups"])
@@ -256,8 +258,6 @@ def create_app(settings=None, provider=None):
                     p.approved_version = group.version
                 emit(s, "PARTICIPANT_APPROVED", gid, user_id=user_id, version=group.version)
             elif action == "authorize":
-                if settings.payment_mode != "mock":
-                    fail("NO_POOLED_PAYMENT", "In Reap mode only the designated purchaser authorizes merchant payment")
                 if not all(p.approved_version == group.version for p in ps):
                     fail("APPROVAL_REQUIRED", "Approve the current proposal before authorizing")
                 for p in ps:
@@ -372,8 +372,12 @@ def create_app(settings=None, provider=None):
             ps = participants(s, group.id)
             if any(row(s, Offer, p.offer_id).source != "reap" for p in ps):
                 fail("REAP_VARIANTS_REQUIRED", "Use offers with source=reap and variant IDs resolved through Reap discovery")
-            items = [{"variantId": row(s, Offer, p.offer_id).variant_id,
-                      "quantity": row(s, BookRequest, p.request_id).quantity} for p in ps]
+            quantities = {}
+            for p in ps:
+                variant_id = row(s, Offer, p.offer_id).variant_id
+                quantities[variant_id] = quantities.get(variant_id, 0) + row(s, BookRequest, p.request_id).quantity
+            items = [{"variantId": variant_id, "quantity": quantity}
+                     for variant_id, quantity in quantities.items()]
             address = group.shipping_address
         try:
             result = reap.create_quote(items, body.email, address, body.offer_code, uid())
@@ -442,7 +446,7 @@ def create_app(settings=None, provider=None):
                             journal(s, group, p, "CAPTURE")
                         p.payment_state = "CAPTURED" if order.provider == "mock" else "NOT_COLLECTED"
                         row(s, BookRequest, p.request_id, lock=True).status = "ORDERED"
-                    emit(s, "ORDER_PLACED", group.id, order_id=order.id, simulated=True,
+                    emit(s, "ORDER_PLACED", group.id, order_id=order.id, simulated=order.provider == "mock",
                          merchant_order_id=order.merchant_order_id, final_minor=amount)
             elif status in {"FAILED", "EXPIRED", "CANCELLED"}:
                 order.state = group.state = "FAILED"

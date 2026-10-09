@@ -6,11 +6,30 @@ from bookpool_bot.backend import BackendClient, BackendError, Conflict, MockBack
 from bookpool_bot.keyboards import MAIN_MENU, proposal_actions
 from bookpool_bot.models import Decision, ProposalStatus, RequestStatus
 from bookpool_bot.presentation import proposal_details, proposal_text
+from bookpool_bot.team_backend import TeamBackendClient
 from bookpool_bot.utils import now
 
 from .common import callback_is_private, is_private
 
 groups = Router(name="groups")
+
+
+@groups.message(Command("sandboxcard"))
+async def sandbox_card(message: Message, backend: BackendClient) -> None:
+    if not await is_private(message):
+        return
+    if not isinstance(backend, TeamBackendClient):
+        await message.answer("Reap sandbox card setup is available in team mode.")
+        return
+    try:
+        url = await backend.start_sandbox_enrollment(message.from_user.id)
+        await message.answer(
+            "Open this Reap sandbox page and enter the test card there:\n" + url
+            if url
+            else "Your Reap sandbox card enrollment is already active."
+        )
+    except (Conflict, BackendError) as exc:
+        await message.answer(str(exc))
 
 
 @groups.message(Command("groups"))
@@ -37,6 +56,9 @@ async def show_groups(message: Message, backend: BackendClient, user_id: int | N
                 if getattr(backend, "decline_cancels_group", False)
                 else "Decline",
                 proposal.user_approved,
+                getattr(backend, "supports_contributions", False)
+                and proposal.user_approved
+                and proposal.payment_status != "AUTHORIZED",
             ),
         )
 
@@ -80,10 +102,13 @@ async def proposal_action(callback: CallbackQuery, backend: BackendClient) -> No
                     if getattr(backend, "decline_cancels_group", False)
                     else "Decline",
                     proposal.user_approved,
+                    getattr(backend, "supports_contributions", False)
+                    and proposal.user_approved
+                    and proposal.payment_status != "AUTHORIZED",
                 ),
             )
             return
-        if action not in {"ready", "wait", "approve", "decline"}:
+        if action not in {"ready", "wait", "approve", "contribute", "decline"}:
             await callback.message.answer("That action isn't available.")
             return
         if action == "approve" and proposal.status.value != "awaiting_approval":
@@ -94,12 +119,34 @@ async def proposal_action(callback: CallbackQuery, backend: BackendClient) -> No
         if action == "approve" and proposal.user_approved:
             await callback.message.answer("You already approved this quote version.")
             return
+        if action == "contribute" and (
+            not getattr(backend, "supports_contributions", False) or not proposal.user_approved
+        ):
+            await callback.message.answer("Approve this quote before confirming a contribution.")
+            return
         # Stable per user/quote/action so repeated Telegram deliveries cannot double-submit.
         key = f"tg:{callback.from_user.id}:{proposal_id}:{version}:{action}"
         result = await backend.submit_group_decision(
             callback.from_user.id, proposal_id, version, Decision(action), key
         )
-        await callback.message.answer(result.message)
+        updated = result.proposal
+        markup = (
+            proposal_actions(
+                updated.proposal_id,
+                updated.quote_version,
+                updated.status.value == "awaiting_approval",
+                "Leave group (cancels proposal)"
+                if getattr(backend, "decline_cancels_group", False)
+                else "Decline",
+                updated.user_approved,
+                getattr(backend, "supports_contributions", False)
+                and updated.user_approved
+                and updated.payment_status != "AUTHORIZED",
+            )
+            if updated.status.value not in {"expired", "superseded"}
+            else None
+        )
+        await callback.message.answer(result.message, reply_markup=markup)
     except (ValueError, NotFound):
         await callback.message.answer("This offer isn't available to you.")
     except Conflict as exc:

@@ -31,8 +31,28 @@ class NotificationDispatcher:
                 request = await self.backend.get_book_request(
                     event.telegram_user_id, event.request_id
                 )
-                qualifier = " in demo mode" if isinstance(self.backend, MockBackendClient) else ""
-                text = f"Your BookPool order has been placed successfully{qualifier}.\n\n{request_line(request)}"
+                simulated = isinstance(self.backend, MockBackendClient) or event.payload.get(
+                    "simulated", False
+                )
+                heading = (
+                    "Simulated group checkout completed. No real funds were charged and no merchant order was placed."
+                    if simulated
+                    else "Your BookPool order was confirmed by the payment provider."
+                )
+                text = f"{heading}\n\n{request_line(request)}"
+                markup = None
+            elif event.event_type == "payment_approval_required":
+                if event.payload.get("is_purchaser") and event.payload.get("approval_url"):
+                    text = (
+                        "All participants confirmed their simulated contributions. "
+                        "Open this Reap sandbox page to approve the single group checkout:\n"
+                        f"{event.payload['approval_url']}"
+                    )
+                else:
+                    text = (
+                        "All participants confirmed their simulated contributions. "
+                        "The designated purchaser must approve the Reap sandbox checkout."
+                    )
                 markup = None
             elif event.proposal_id:
                 proposal = await self.backend.get_group_proposal(
@@ -64,6 +84,9 @@ class NotificationDispatcher:
                         if getattr(self.backend, "decline_cancels_group", False)
                         else "Decline",
                         proposal.user_approved,
+                        getattr(self.backend, "supports_contributions", False)
+                        and proposal.user_approved
+                        and proposal.payment_status != "AUTHORIZED",
                     )
                 )
             else:
