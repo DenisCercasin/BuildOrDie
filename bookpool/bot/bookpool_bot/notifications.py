@@ -73,6 +73,11 @@ class NotificationDispatcher:
                     "payment_failed": "The payment step failed. Check your request status for next steps.",
                 }.get(event.event_type, "BookPool has an update about your group.")
                 text = f"{heading}\n\n{proposal_text(proposal, request.title or request.isbn)}"
+                if event.payload.get("reap_quote") and event.payload.get("is_purchaser"):
+                    text += (
+                        "\n\nYou are the designated purchaser. Send /sandboxcard "
+                        "to set up the test card on Reap's hosted page."
+                    )
                 markup = (
                     None
                     if proposal.status.value in {"expired", "superseded"}

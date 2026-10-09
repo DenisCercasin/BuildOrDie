@@ -375,8 +375,9 @@ class TeamBackendClient(BackendClient):
                 mine = [p for p in group["participants"] if p["user_id"] == backend_user_id]
                 if mine:
                     payload = dict(raw.get("payload") or {})
+                    payload["is_purchaser"] = backend_user_id == group["purchaser_id"]
+                    payload["reap_quote"] = bool(group.get("quote_id"))
                     if raw["kind"] == "PAYMENT_APPROVAL_REQUIRED":
-                        payload["is_purchaser"] = backend_user_id == group["purchaser_id"]
                         if payload["is_purchaser"]:
                             payload["approval_url"] = (group.get("order") or {}).get("approval_url")
                     events.append(
