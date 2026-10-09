@@ -55,7 +55,7 @@ See `.env.example`. For the backend in this repository, set `BACKEND_MODE=team`,
 ### Four-person Reap sandbox test
 
 1. Set the backend's `PAYMENT_MODE=reap_sandbox`, a private `REAP_API_KEY`, and a fresh `DATABASE_URL`. The local worker uses the NTU delivery address `41 Students Walk, Singapore 639549`; see [`../../backend/docs/REAP.md`](../../backend/docs/REAP.md) for sandbox contact settings. Restart the backend, bot, and group worker.
-2. Four separate Telegram accounts send `/start`, confirm NTU pickup, create one request each, and press **Start Searching**. For a catalog-verified sample, use Atomic Habits, The Psychology of Money, Educated, and The Alchemist. Choose **Any savings**, a budget of at least S$50 per book, and a date at least 14 days out.
+2. Four separate Telegram accounts send `/start`, confirm NTU pickup, create one request each, and press **Start Searching**. For a catalog-verified sample, use Atomic Habits, The Psychology of Money, Educated, and The Alchemist. Choose **Any format** and **Any savings**, a budget of at least S$50 per book, and a date at least 14 days out.
 3. A Reap quote arrives in each chat. The designated purchaser sends `/sandboxcard` and enters the test card on Reap's hosted page. All four review the same quote version, press **Approve This Offer**, then **Confirm simulated contribution**. These confirmations charge no card.
 4. The purchaser receives a Reap hosted approval URL for the single group charge. After approval, the backend reconciliation worker confirms the outcome. One card enrollment is enough for all four participants because Reap charges the designated purchaser once.
 
