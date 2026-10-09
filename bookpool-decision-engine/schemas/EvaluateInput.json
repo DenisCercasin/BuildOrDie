@@ -1,0 +1,1151 @@
+{
+  "$defs": {
+    "Action": {
+      "enum": [
+        "BUY_NOW",
+        "WAIT"
+      ],
+      "title": "Action",
+      "type": "string"
+    },
+    "BookRequest": {
+      "description": "One user's open request for one book (an *open* request, not yet committed).",
+      "properties": {
+        "request_id": {
+          "title": "Request Id",
+          "type": "string"
+        },
+        "user_id": {
+          "title": "User Id",
+          "type": "string"
+        },
+        "book_id": {
+          "description": "ISBN-13 or Person 2's canonical book id",
+          "title": "Book Id",
+          "type": "string"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        },
+        "quantity": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Quantity",
+          "type": "integer"
+        },
+        "deadline": {
+          "description": "Latest acceptable delivery date",
+          "format": "date",
+          "title": "Deadline",
+          "type": "string"
+        },
+        "max_budget": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Max total the user will pay incl. their shipping share",
+          "title": "Max Budget"
+        },
+        "min_savings_to_wait": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "default": "0",
+          "description": "Smallest saving that makes waiting for a group worthwhile to this user",
+          "title": "Min Savings To Wait"
+        },
+        "pickup_point": {
+          "description": "e.g. 'NTU-NorthSpine'. Groups share one pickup point",
+          "title": "Pickup Point",
+          "type": "string"
+        },
+        "preferred_merchants": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Restrict to these merchant_ids; None = any approved merchant",
+          "title": "Preferred Merchants"
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Created At"
+        }
+      },
+      "required": [
+        "request_id",
+        "user_id",
+        "book_id",
+        "deadline",
+        "pickup_point"
+      ],
+      "title": "BookRequest",
+      "type": "object"
+    },
+    "EngineConfig": {
+      "description": "Tunable business rules. Defaults are sensible for the demo.",
+      "properties": {
+        "cost_split": {
+          "default": "equal",
+          "description": "How a group's shipping fee is shared: equally, or by each line's value",
+          "enum": [
+            "equal",
+            "proportional"
+          ],
+          "title": "Cost Split",
+          "type": "string"
+        },
+        "min_saving_per_member": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "default": "0.01",
+          "description": "Every group member must save at least this vs buying alone",
+          "title": "Min Saving Per Member"
+        },
+        "buy_now_marginal_threshold": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "default": "0.50",
+          "description": "Recommend buying when expected extra saving per person from waiting is below this",
+          "title": "Buy Now Marginal Threshold"
+        },
+        "order_processing_days": {
+          "default": 1,
+          "description": "Days reserved for approvals + payment before the order is placed",
+          "minimum": 0,
+          "title": "Order Processing Days",
+          "type": "integer"
+        },
+        "deadline_warning_days": {
+          "default": 1,
+          "description": "Recommend buying when this many days or fewer remain to order",
+          "minimum": 0,
+          "title": "Deadline Warning Days",
+          "type": "integer"
+        },
+        "low_stock_threshold": {
+          "default": 2,
+          "minimum": 0,
+          "title": "Low Stock Threshold",
+          "type": "integer"
+        },
+        "price_drop_percent": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "default": "5",
+          "title": "Price Drop Percent"
+        },
+        "expected_arrivals_per_day": {
+          "default": 0.5,
+          "description": "Expected new compatible requests per day (for wait-vs-buy)",
+          "minimum": 0,
+          "title": "Expected Arrivals Per Day",
+          "type": "number"
+        },
+        "typical_book_price": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "default": "25.00",
+          "title": "Typical Book Price"
+        },
+        "max_group_size": {
+          "default": 8,
+          "minimum": 2,
+          "title": "Max Group Size",
+          "type": "integer"
+        },
+        "exact_solver_max_requests": {
+          "default": 12,
+          "description": "Use the exact partition solver up to this many requests per pickup point",
+          "minimum": 2,
+          "title": "Exact Solver Max Requests",
+          "type": "integer"
+        }
+      },
+      "title": "EngineConfig",
+      "type": "object"
+    },
+    "EngineEvent": {
+      "additionalProperties": false,
+      "description": "A proactive notification for Person 1 to send (Person 4 stores/dedupes it).",
+      "properties": {
+        "event_type": {
+          "$ref": "#/$defs/EventType"
+        },
+        "dedupe_key": {
+          "description": "Same key = same notification; send once",
+          "title": "Dedupe Key",
+          "type": "string"
+        },
+        "group_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Group Id"
+        },
+        "request_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Request Ids",
+          "type": "array"
+        },
+        "user_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "User Ids",
+          "type": "array"
+        },
+        "message": {
+          "description": "Ready-to-send text; the bot may rephrase it with the LLM",
+          "title": "Message",
+          "type": "string"
+        },
+        "data": {
+          "additionalProperties": true,
+          "title": "Data",
+          "type": "object"
+        },
+        "needs_user_decision": {
+          "default": false,
+          "title": "Needs User Decision",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "event_type",
+        "dedupe_key",
+        "group_id",
+        "request_ids",
+        "user_ids",
+        "message"
+      ],
+      "title": "EngineEvent",
+      "type": "object"
+    },
+    "EngineResult": {
+      "additionalProperties": false,
+      "properties": {
+        "evaluated_at": {
+          "format": "date-time",
+          "title": "Evaluated At",
+          "type": "string"
+        },
+        "proposals": {
+          "items": {
+            "$ref": "#/$defs/GroupProposal"
+          },
+          "title": "Proposals",
+          "type": "array"
+        },
+        "solo_plans": {
+          "items": {
+            "$ref": "#/$defs/SoloPlan"
+          },
+          "title": "Solo Plans",
+          "type": "array"
+        },
+        "events": {
+          "items": {
+            "$ref": "#/$defs/EngineEvent"
+          },
+          "title": "Events",
+          "type": "array"
+        },
+        "total_savings": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Total Savings"
+        },
+        "uses_simulated_data": {
+          "title": "Uses Simulated Data",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "evaluated_at",
+        "proposals",
+        "solo_plans",
+        "events",
+        "total_savings",
+        "uses_simulated_data"
+      ],
+      "title": "EngineResult",
+      "type": "object"
+    },
+    "EventType": {
+      "enum": [
+        "GROUP_FORMED",
+        "MEMBERS_JOINED",
+        "MEMBERS_LEFT",
+        "GROUPS_MERGED",
+        "GROUP_SPLIT",
+        "GROUP_RESTRUCTURED",
+        "GROUP_DISSOLVED",
+        "FREE_SHIPPING_UNLOCKED",
+        "BUY_NOW_RECOMMENDED",
+        "PRICE_DROP",
+        "SOLO_BUY_RECOMMENDED",
+        "DEADLINE_UNREACHABLE",
+        "REQUEST_UNSERVABLE"
+      ],
+      "title": "EventType",
+      "type": "string"
+    },
+    "GroupProposal": {
+      "additionalProperties": false,
+      "properties": {
+        "group_id": {
+          "title": "Group Id",
+          "type": "string"
+        },
+        "merchant_id": {
+          "title": "Merchant Id",
+          "type": "string"
+        },
+        "merchant_name": {
+          "title": "Merchant Name",
+          "type": "string"
+        },
+        "pickup_point": {
+          "title": "Pickup Point",
+          "type": "string"
+        },
+        "participants": {
+          "items": {
+            "$ref": "#/$defs/ParticipantLine"
+          },
+          "title": "Participants",
+          "type": "array"
+        },
+        "item_count": {
+          "title": "Item Count",
+          "type": "integer"
+        },
+        "subtotal": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Subtotal"
+        },
+        "discount_total": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Discount Total"
+        },
+        "shipping_fee": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Shipping Fee"
+        },
+        "total": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Total"
+        },
+        "individual_total": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Individual Total"
+        },
+        "total_savings": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Total Savings"
+        },
+        "free_shipping_unlocked": {
+          "title": "Free Shipping Unlocked",
+          "type": "boolean"
+        },
+        "amount_to_free_shipping": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Amount To Free Shipping"
+        },
+        "expected_delivery": {
+          "format": "date",
+          "title": "Expected Delivery",
+          "type": "string"
+        },
+        "recommendation": {
+          "$ref": "#/$defs/Recommendation"
+        },
+        "reasoning": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reasoning",
+          "type": "array"
+        },
+        "is_simulated": {
+          "title": "Is Simulated",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "group_id",
+        "merchant_id",
+        "merchant_name",
+        "pickup_point",
+        "participants",
+        "item_count",
+        "subtotal",
+        "discount_total",
+        "shipping_fee",
+        "total",
+        "individual_total",
+        "total_savings",
+        "free_shipping_unlocked",
+        "amount_to_free_shipping",
+        "expected_delivery",
+        "recommendation",
+        "reasoning",
+        "is_simulated"
+      ],
+      "title": "GroupProposal",
+      "type": "object"
+    },
+    "MerchantOffer": {
+      "description": "A purchasable offer for one book at one merchant. Supplied by Person 2.",
+      "properties": {
+        "merchant_id": {
+          "title": "Merchant Id",
+          "type": "string"
+        },
+        "book_id": {
+          "title": "Book Id",
+          "type": "string"
+        },
+        "price": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Price"
+        },
+        "in_stock": {
+          "default": true,
+          "title": "In Stock",
+          "type": "boolean"
+        },
+        "stock_qty": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "None = unknown / plenty",
+          "title": "Stock Qty"
+        },
+        "delivery_days": {
+          "description": "Merchant's estimated days from order to delivery",
+          "minimum": 0,
+          "title": "Delivery Days",
+          "type": "integer"
+        },
+        "fetched_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fetched At"
+        },
+        "is_simulated": {
+          "default": false,
+          "title": "Is Simulated",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "merchant_id",
+        "book_id",
+        "price",
+        "delivery_days"
+      ],
+      "title": "MerchantOffer",
+      "type": "object"
+    },
+    "MerchantPolicy": {
+      "description": "Per-merchant shipping/discount terms. Supplied by Person 2.",
+      "properties": {
+        "merchant_id": {
+          "title": "Merchant Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "shipping_fee": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "description": "Flat delivery fee per order",
+          "title": "Shipping Fee"
+        },
+        "free_shipping_threshold": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Order value (after discounts) at which delivery is free",
+          "title": "Free Shipping Threshold"
+        },
+        "volume_discounts": {
+          "items": {
+            "$ref": "#/$defs/VolumeTier"
+          },
+          "title": "Volume Discounts",
+          "type": "array"
+        },
+        "delivers_to": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Pickup points served; None = all",
+          "title": "Delivers To"
+        },
+        "approved": {
+          "default": true,
+          "description": "On the approved merchant list",
+          "title": "Approved",
+          "type": "boolean"
+        },
+        "is_simulated": {
+          "default": false,
+          "title": "Is Simulated",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "merchant_id",
+        "name",
+        "shipping_fee"
+      ],
+      "title": "MerchantPolicy",
+      "type": "object"
+    },
+    "ParticipantLine": {
+      "additionalProperties": false,
+      "properties": {
+        "request_id": {
+          "title": "Request Id",
+          "type": "string"
+        },
+        "user_id": {
+          "title": "User Id",
+          "type": "string"
+        },
+        "book_id": {
+          "title": "Book Id",
+          "type": "string"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Title"
+        },
+        "quantity": {
+          "title": "Quantity",
+          "type": "integer"
+        },
+        "unit_price": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Unit Price"
+        },
+        "item_subtotal": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Item Subtotal"
+        },
+        "discount": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Discount"
+        },
+        "shipping_share": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Shipping Share"
+        },
+        "total": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "description": "What this participant pays in the group",
+          "title": "Total"
+        },
+        "individual_best_total": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Individual Best Total"
+        },
+        "individual_best_merchant": {
+          "title": "Individual Best Merchant",
+          "type": "string"
+        },
+        "individual_meets_deadline": {
+          "title": "Individual Meets Deadline",
+          "type": "boolean"
+        },
+        "savings": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Savings"
+        },
+        "within_budget": {
+          "title": "Within Budget",
+          "type": "boolean"
+        },
+        "meets_min_savings": {
+          "title": "Meets Min Savings",
+          "type": "boolean"
+        },
+        "deadline": {
+          "format": "date",
+          "title": "Deadline",
+          "type": "string"
+        }
+      },
+      "required": [
+        "request_id",
+        "user_id",
+        "book_id",
+        "title",
+        "quantity",
+        "unit_price",
+        "item_subtotal",
+        "discount",
+        "shipping_share",
+        "total",
+        "individual_best_total",
+        "individual_best_merchant",
+        "individual_meets_deadline",
+        "savings",
+        "within_budget",
+        "meets_min_savings",
+        "deadline"
+      ],
+      "title": "ParticipantLine",
+      "type": "object"
+    },
+    "ReasonCode": {
+      "enum": [
+        "FREE_SHIPPING_UNLOCKED",
+        "LOW_MARGINAL_VALUE",
+        "DEADLINE_APPROACHING",
+        "LOW_STOCK",
+        "PRICE_DROP",
+        "WAITING_LIKELY_PAYS_OFF",
+        "MAX_GROUP_SIZE"
+      ],
+      "title": "ReasonCode",
+      "type": "string"
+    },
+    "Recommendation": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/Action"
+        },
+        "reasons": {
+          "items": {
+            "$ref": "#/$defs/ReasonCode"
+          },
+          "title": "Reasons",
+          "type": "array"
+        },
+        "expected_extra_saving_per_person": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Expected Extra Saving Per Person"
+        },
+        "probability_more_buyers": {
+          "title": "Probability More Buyers",
+          "type": "number"
+        },
+        "order_by": {
+          "description": "Latest date the order can be placed and still meet every deadline",
+          "format": "date",
+          "title": "Order By",
+          "type": "string"
+        },
+        "days_left_to_order": {
+          "title": "Days Left To Order",
+          "type": "integer"
+        },
+        "explanation": {
+          "title": "Explanation",
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "reasons",
+        "expected_extra_saving_per_person",
+        "probability_more_buyers",
+        "order_by",
+        "days_left_to_order",
+        "explanation"
+      ],
+      "title": "Recommendation",
+      "type": "object"
+    },
+    "SoloPlan": {
+      "additionalProperties": false,
+      "description": "What to do with a request that is not (yet) in any group.",
+      "properties": {
+        "request_id": {
+          "title": "Request Id",
+          "type": "string"
+        },
+        "user_id": {
+          "title": "User Id",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/SoloStatus"
+        },
+        "best_merchant": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Best Merchant"
+        },
+        "best_total": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Best Total"
+        },
+        "best_expected_delivery": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Best Expected Delivery"
+        },
+        "potential_group_saving": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Potential Group Saving"
+        },
+        "order_by": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Order By"
+        },
+        "reasoning": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reasoning",
+          "type": "array"
+        }
+      },
+      "required": [
+        "request_id",
+        "user_id",
+        "status",
+        "best_merchant",
+        "best_total",
+        "best_expected_delivery",
+        "potential_group_saving",
+        "order_by",
+        "reasoning"
+      ],
+      "title": "SoloPlan",
+      "type": "object"
+    },
+    "SoloStatus": {
+      "enum": [
+        "WAITING_FOR_GROUP",
+        "BUY_SOLO_RECOMMENDED",
+        "DEADLINE_UNREACHABLE",
+        "UNSERVABLE"
+      ],
+      "title": "SoloStatus",
+      "type": "string"
+    },
+    "VolumeTier": {
+      "properties": {
+        "min_items": {
+          "minimum": 1,
+          "title": "Min Items",
+          "type": "integer"
+        },
+        "percent_off": {
+          "anyOf": [
+            {
+              "maximum": 100.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Percent Off"
+        }
+      },
+      "required": [
+        "min_items",
+        "percent_off"
+      ],
+      "title": "VolumeTier",
+      "type": "object"
+    }
+  },
+  "description": "Request body for the HTTP API (and a convenient bundle for the backend).",
+  "properties": {
+    "requests": {
+      "items": {
+        "$ref": "#/$defs/BookRequest"
+      },
+      "title": "Requests",
+      "type": "array"
+    },
+    "offers": {
+      "items": {
+        "$ref": "#/$defs/MerchantOffer"
+      },
+      "title": "Offers",
+      "type": "array"
+    },
+    "merchants": {
+      "items": {
+        "$ref": "#/$defs/MerchantPolicy"
+      },
+      "title": "Merchants",
+      "type": "array"
+    },
+    "now": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Now"
+    },
+    "previous": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/EngineResult"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "previous_offers": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/MerchantOffer"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Previous Offers"
+    },
+    "config": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/EngineConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "requests",
+    "offers",
+    "merchants"
+  ],
+  "title": "EvaluateInput",
+  "type": "object"
+}

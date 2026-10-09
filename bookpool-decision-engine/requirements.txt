@@ -1,0 +1,5 @@
+pydantic>=2.5
+fastapi>=0.110   # only for the optional HTTP service
+uvicorn>=0.27    # only for the optional HTTP service
+pytest>=8
+httpx>=0.27      # for API tests

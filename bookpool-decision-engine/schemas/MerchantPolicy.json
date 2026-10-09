@@ -1,0 +1,116 @@
+{
+  "$defs": {
+    "VolumeTier": {
+      "properties": {
+        "min_items": {
+          "minimum": 1,
+          "title": "Min Items",
+          "type": "integer"
+        },
+        "percent_off": {
+          "anyOf": [
+            {
+              "maximum": 100.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Percent Off"
+        }
+      },
+      "required": [
+        "min_items",
+        "percent_off"
+      ],
+      "title": "VolumeTier",
+      "type": "object"
+    }
+  },
+  "description": "Per-merchant shipping/discount terms. Supplied by Person 2.",
+  "properties": {
+    "merchant_id": {
+      "title": "Merchant Id",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "shipping_fee": {
+      "anyOf": [
+        {
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        }
+      ],
+      "description": "Flat delivery fee per order",
+      "title": "Shipping Fee"
+    },
+    "free_shipping_threshold": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Order value (after discounts) at which delivery is free",
+      "title": "Free Shipping Threshold"
+    },
+    "volume_discounts": {
+      "items": {
+        "$ref": "#/$defs/VolumeTier"
+      },
+      "title": "Volume Discounts",
+      "type": "array"
+    },
+    "delivers_to": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Pickup points served; None = all",
+      "title": "Delivers To"
+    },
+    "approved": {
+      "default": true,
+      "description": "On the approved merchant list",
+      "title": "Approved",
+      "type": "boolean"
+    },
+    "is_simulated": {
+      "default": false,
+      "title": "Is Simulated",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "merchant_id",
+    "name",
+    "shipping_fee"
+  ],
+  "title": "MerchantPolicy",
+  "type": "object"
+}

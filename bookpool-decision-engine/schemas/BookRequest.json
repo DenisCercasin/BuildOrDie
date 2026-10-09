@@ -1,0 +1,116 @@
+{
+  "description": "One user's open request for one book (an *open* request, not yet committed).",
+  "properties": {
+    "request_id": {
+      "title": "Request Id",
+      "type": "string"
+    },
+    "user_id": {
+      "title": "User Id",
+      "type": "string"
+    },
+    "book_id": {
+      "description": "ISBN-13 or Person 2's canonical book id",
+      "title": "Book Id",
+      "type": "string"
+    },
+    "title": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Title"
+    },
+    "quantity": {
+      "default": 1,
+      "minimum": 1,
+      "title": "Quantity",
+      "type": "integer"
+    },
+    "deadline": {
+      "description": "Latest acceptable delivery date",
+      "format": "date",
+      "title": "Deadline",
+      "type": "string"
+    },
+    "max_budget": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Max total the user will pay incl. their shipping share",
+      "title": "Max Budget"
+    },
+    "min_savings_to_wait": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        }
+      ],
+      "default": "0",
+      "description": "Smallest saving that makes waiting for a group worthwhile to this user",
+      "title": "Min Savings To Wait"
+    },
+    "pickup_point": {
+      "description": "e.g. 'NTU-NorthSpine'. Groups share one pickup point",
+      "title": "Pickup Point",
+      "type": "string"
+    },
+    "preferred_merchants": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Restrict to these merchant_ids; None = any approved merchant",
+      "title": "Preferred Merchants"
+    },
+    "created_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Created At"
+    }
+  },
+  "required": [
+    "request_id",
+    "user_id",
+    "book_id",
+    "deadline",
+    "pickup_point"
+  ],
+  "title": "BookRequest",
+  "type": "object"
+}
