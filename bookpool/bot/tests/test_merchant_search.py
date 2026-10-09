@@ -75,6 +75,8 @@ async def test_live_store_search_displays_only_matching_in_stock_books():
         shown = message.sent[0][0]
         assert "S$29.99" in shown
         assert "Delivery charges" in shown
+        assert "you do not need to choose a listing" in shown
+        assert "Automatic group matching is not active yet" in shown
         assert "Workbook" not in shown
 
 

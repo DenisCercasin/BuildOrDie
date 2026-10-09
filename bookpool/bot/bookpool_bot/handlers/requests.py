@@ -322,7 +322,10 @@ async def send_live_search(
             if len(result.failed_stores) == 2
             else "No matching in-stock listings were found at the approved stores."
         )
-        await message.answer(f"{detail} Use Check store prices later to retry.")
+        await message.answer(
+            f"{detail} Your request is saved. Use Check store prices later to retry. "
+            "Automatic group matching is not active yet."
+        )
         return
     lines = ["Live bookstore listings (book price only):", ""]
     for match in result.matches:
@@ -331,6 +334,7 @@ async def send_live_search(
         [
             "",
             "Delivery charges and NTU arrival dates are not verified yet. These are listings, not group offers or final prices.",
+            "Your request is saved; you do not need to choose a listing. Automatic group matching is not active yet, so these listings will not become a group offer on their own. Use Check store prices later to refresh them.",
         ]
     )
     if result.failed_stores:
