@@ -301,3 +301,61 @@ def test_worker_refreshes_expired_provider_quote_before_one_checkout(tmp_path):
                 await worker.close()
 
     asyncio.run(scenario())
+
+
+@pytest.mark.parametrize('status,explicit', [('EXPIRED', False), ('FAILED', False), ('REQUIRES_ACTION', True)])
+def test_enrollment_recovery_reuses_key_after_timeout(tmp_path, status, explicit):
+    client, provider = reap_client(tmp_path)
+    users, _, _, _, _ = setup_group(client)
+    user_id = users[0]['id']
+    with client.app.state.db.transaction(write=True) as s:
+        s.get(User, user_id).enrollment_id = 'old-session'
+    # Use a standalone HTTPS-configured app over the same database.
+    settings = Settings(database_url=f'sqlite:///{tmp_path}/reap.db', service_api_key=KEY,
+                        payment_mode='reap_sandbox', reap_api_key='test',
+                        payment_return_url='https://t.me/test_bot')
+    client = TestClient(create_app(settings, provider))
+    client.headers['Authorization'] = 'Bearer ' + KEY
+    calls = []
+
+    def get(ident):
+        return {'id': ident, 'status': status if ident == 'old-session' else 'REQUIRES_ACTION',
+                'nextAction': {'url': 'https://sandbox.example/new-session'}}
+
+    def create(user, email, url, key):
+        calls.append(key)
+        if len(calls) == 1:
+            raise ProviderError('TIMEOUT', uncertain=True)
+        return get('new-session')
+
+    provider.get_enrollment = get
+    provider.create_enrollment = create
+    body = {'email': 'demo@example.com', 'return_url': settings.hosted_return_url}
+    if explicit:
+        body['replace_enrollment_id'] = 'old-session'
+    path = f'/v1/users/{user_id}/enrollments'
+    headers = {'Idempotency-Key': 'stable'}
+    assert client.post(path, json=body, headers=headers).status_code == 502
+    recovered = client.post(path, json=body, headers=headers)
+    assert recovered.status_code == 200
+    assert recovered.json()['enrollment_id'] == 'new-session'
+    assert calls[0] == calls[1]
+    # Replaying the exact replacement request cannot replace the new session again.
+    assert client.post(path, json=body, headers=headers).json()['enrollment_id'] == 'new-session'
+    assert len(calls) == 2
+
+
+def test_active_enrollment_is_not_replaced_by_retry(tmp_path):
+    client, provider = reap_client(tmp_path)
+    users, _ = prepare(client, provider)
+    settings = Settings(database_url=f'sqlite:///{tmp_path}/reap.db', service_api_key=KEY,
+                        payment_mode='reap_sandbox', reap_api_key='test',
+                        payment_return_url='https://t.me/test_bot')
+    client = TestClient(create_app(settings, provider))
+    client.headers['Authorization'] = 'Bearer ' + KEY
+    response = client.post(f'/v1/users/{users[0]["id"]}/enrollments',
+                           headers={'Idempotency-Key': 'stable'}, json={
+                               'email': 'demo@example.com', 'return_url': settings.hosted_return_url,
+                               'replace_enrollment_id': 'enr-test'})
+    assert response.status_code == 200
+    assert response.json()['status'] == 'ACTIVE'

@@ -80,7 +80,7 @@ class TeamBackendClient(BackendClient):
     async def close(self) -> None:
         await self.client.aclose()
 
-    async def start_sandbox_enrollment(self, telegram_user_id: int) -> str:
+    async def start_sandbox_enrollment(self, telegram_user_id: int, *, retry: bool = False) -> str:
         user_id = await self._backend_user_id(telegram_user_id)
         health = await self._request("GET", "/health")
         if health["payment_mode"] != "reap_sandbox":
@@ -88,16 +88,25 @@ class TeamBackendClient(BackendClient):
         groups = await self._request("GET", "/v1/groups", params={"limit": 500})
         if not any(group["purchaser_id"] == user_id for group in groups):
             raise Conflict("Only a designated group purchaser can set up the sandbox card.")
+        body = {
+            "email": os.getenv("BOOKPOOL_PURCHASER_EMAIL", "bookpool.test@example.com"),
+            "return_url": health.get("payment_return_url")
+            or health["public_base_url"].rstrip("/") + "/payment-return",
+        }
+        headers = {"Idempotency-Key": f"telegram-sandbox-https-{user_id}"}
         result = await self._request(
             "POST",
             f"/v1/users/{user_id}/enrollments",
-            headers={"Idempotency-Key": f"telegram-sandbox-https-{user_id}"},
-            json={
-                "email": os.getenv("BOOKPOOL_PURCHASER_EMAIL", "bookpool.test@example.com"),
-                "return_url": health.get("payment_return_url")
-                or health["public_base_url"].rstrip("/") + "/payment-return",
-            },
+            headers=headers,
+            json=body,
         )
+        if retry and result.get("status") == "REQUIRES_ACTION":
+            result = await self._request(
+                "POST",
+                f"/v1/users/{user_id}/enrollments",
+                headers=headers,
+                json={**body, "replace_enrollment_id": result["enrollment_id"]},
+            )
         if result.get("status") == "ACTIVE":
             return ""
         url = (result.get("nextAction") or {}).get("url")
@@ -105,7 +114,7 @@ class TeamBackendClient(BackendClient):
             return url
         raise BackendError(
             "Reap has not confirmed the card setup and supplied no card-entry link. "
-            "Please try /sandboxcard again; your card is not yet ready."
+            "If the page says the session was used, send /sandboxcard retry for a fresh link."
         )
 
     async def _request(self, method: str, path: str, **kwargs):

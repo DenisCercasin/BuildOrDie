@@ -350,15 +350,32 @@ def create_app(settings=None, provider=None):
             user = row(s, User, user_id)
             existing_id = user.enrollment_id
         try:
-            result = reap.get_enrollment(existing_id) if existing_id else reap.create_enrollment(
-                user_id, body.email, body.return_url, "enrollment-" + fingerprint({"user": user_id, "key": idempotency_key}))
+            result = reap.get_enrollment(existing_id) if existing_id else None
+            replace = result and (
+                result.get("status") in {"EXPIRED", "FAILED", "REVOKED"}
+                or (body.replace_enrollment_id == existing_id
+                    and result.get("status") == "REQUIRES_ACTION"))
+            if not result or replace:
+                with db.transaction() as s:
+                    pending = s.scalar(select(Order).join(Group, Order.group_id == Group.id).where(
+                        Group.purchaser_id == user_id,
+                        Order.state.in_(["CHECKOUT_PENDING", "PAYMENT_UNKNOWN", "PAYMENT_PENDING", "AWAITING_PAYMENT_APPROVAL"])))
+                    if pending:
+                        fail("CHECKOUT_IN_PROGRESS", "Finish the existing checkout before replacing card setup")
+                # A replacement has a stable key tied to the old session. An uncertain
+                # retry must recover the same new enrollment, never create another.
+                key_data = {"user": user_id, "key": idempotency_key}
+                if existing_id:
+                    key_data["replaces"] = existing_id
+                result = reap.create_enrollment(user_id, body.email, body.return_url,
+                                                "enrollment-" + fingerprint(key_data))
         except ProviderError as error:
             provider_failure(error)
         if not result.get("id"):
             fail("PROVIDER_RESPONSE_INVALID", "Enrollment response lacks an ID", 502)
         with db.transaction(write=True) as s:
             user = row(s, User, user_id, lock=True)
-            if user.enrollment_id and user.enrollment_id != result["id"]:
+            if user.enrollment_id not in {existing_id, result["id"]}:
                 fail("ENROLLMENT_CONFLICT", "Another enrollment is already linked")
             user.enrollment_id = result["id"]
         return {"enrollment_id": result["id"], "status": result.get("status"), "nextAction": result.get("nextAction")}

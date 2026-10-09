@@ -22,9 +22,13 @@ async def sandbox_card(message: Message, backend: BackendClient) -> None:
         await message.answer("Reap sandbox card setup is available in team mode.")
         return
     try:
-        url = await backend.start_sandbox_enrollment(message.from_user.id)
+        retry = (message.text or "").split()[1:] == ["retry"]
+        url = await backend.start_sandbox_enrollment(message.from_user.id, retry=retry)
         await message.answer(
-            "Open this Reap sandbox page and enter the test card there:\n" + url
+            "Open this Reap sandbox page and enter the test card there:\n"
+            + url
+            + "\nComplete every verification step. Sandbox OTP: 456789. "
+            "If the page says the session was already used, send /sandboxcard retry."
             if url
             else "Your Reap sandbox card enrollment is already active."
         )

@@ -115,6 +115,7 @@ class EnrollmentIn(Payload):
     # Provider payload fields vary by enrollment source; never accept raw card details here.
     email: Annotated[str, Field(pattern=r"^[^\s@]+@[^\s@]+\.[^\s@]+$", max_length=254)]
     return_url: Annotated[str, Field(min_length=1, max_length=2000)]
+    replace_enrollment_id: Id | None = None
 
 
 class AttachEnrollmentIn(Payload):
