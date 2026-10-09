@@ -46,12 +46,19 @@ INTERRUPT = keyboard(
 )
 
 
-def request_actions(request_id: str, editable: bool = True) -> InlineKeyboardMarkup:
+def request_actions(
+    request_id: str, editable: bool = True, searchable: bool = False
+) -> InlineKeyboardMarkup:
+    rows = []
+    if searchable:
+        rows.append((("Check store prices", f"q:search:{request_id}"),))
     if editable:
-        return keyboard(
+        rows.append(
             (("Edit", f"q:edit:{request_id}"), ("Cancel request", f"q:cancel:{request_id}"))
         )
-    return keyboard((("Cancel request", f"q:cancel:{request_id}"),))
+    else:
+        rows.append((("Cancel request", f"q:cancel:{request_id}"),))
+    return keyboard(*rows)
 
 
 def proposal_actions(

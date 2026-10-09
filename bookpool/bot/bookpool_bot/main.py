@@ -8,6 +8,7 @@ from aiogram.types import ErrorEvent
 from bookpool_bot.backend import HttpBackendClient, MockBackendClient
 from bookpool_bot.config import Settings
 from bookpool_bot.handlers import commands, fallback, groups, requests
+from bookpool_bot.merchant_search import MerchantSearchClient
 from bookpool_bot.notifications import NotificationDispatcher
 from bookpool_bot.parser import BookRequestParser
 from bookpool_bot.team_backend import TeamBackendClient
@@ -38,8 +39,11 @@ async def run() -> None:
         settings.llm_base_url,
         settings.llm_api_key,
     )
+    merchant_search = MerchantSearchClient() if settings.backend_mode == "team" else None
     bot = Bot(settings.telegram_bot_token)
-    dp = Dispatcher(storage=MemoryStorage(), backend=backend, parser=parser)
+    dp = Dispatcher(
+        storage=MemoryStorage(), backend=backend, parser=parser, merchant_search=merchant_search
+    )
     dp.include_routers(commands, requests, groups, fallback)
 
     @dp.errors()
@@ -63,6 +67,8 @@ async def run() -> None:
         await asyncio.gather(notifier, return_exceptions=True)
         if isinstance(backend, (HttpBackendClient, TeamBackendClient)):
             await backend.close()
+        if merchant_search is not None:
+            await merchant_search.close()
         await bot.session.close()
 
 

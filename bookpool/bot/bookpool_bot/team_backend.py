@@ -36,6 +36,7 @@ class TeamBackendClient(BackendClient):
     requires_budget = True
     supports_update = False
     decline_cancels_group = True
+    supports_live_search = True
 
     def __init__(self, base_url: str, api_key: str, state_path: str | Path):
         if not api_key:

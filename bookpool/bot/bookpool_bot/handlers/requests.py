@@ -16,11 +16,12 @@ from bookpool_bot.keyboards import (
     SKIP_SAVINGS,
     request_actions,
 )
+from bookpool_bot.merchant_search import MerchantSearchClient
 from bookpool_bot.models import BookFormat, BookRequestInput
 from bookpool_bot.parser import BookRequestParser
 from bookpool_bot.presentation import request_line
 from bookpool_bot.states import RequestFlow
-from bookpool_bot.utils import parse_amount_minor, parse_deadline, today
+from bookpool_bot.utils import money, parse_amount_minor, parse_deadline, today
 
 from .common import (
     ask_next,
@@ -253,7 +254,13 @@ async def savings_text(message: Message, state: FSMContext, parser: BookRequestP
 
 
 @requests.callback_query(RequestFlow.review, F.data.startswith("r:"))
-async def review_choice(callback: CallbackQuery, state: FSMContext, backend: BackendClient) -> None:
+async def review_choice(
+    callback: CallbackQuery,
+    state: FSMContext,
+    backend: BackendClient,
+    merchant_search: MerchantSearchClient | None = None,
+) -> None:
+    answered = False
     try:
         choice = callback.data.split(":")[1]
         if choice == "cancel":
@@ -282,9 +289,15 @@ async def review_choice(callback: CallbackQuery, state: FSMContext, backend: Bac
             await callback.message.answer(
                 f"{message}\n\n{request_line(saved)}",
                 reply_markup=request_actions(
-                    saved.request_id, getattr(backend, "supports_update", True)
+                    saved.request_id,
+                    getattr(backend, "supports_update", True),
+                    getattr(backend, "supports_live_search", False),
                 ),
             )
+            if getattr(backend, "supports_live_search", False):
+                await callback.answer()
+                answered = True
+                await send_live_search(callback.message, saved, merchant_search)
     except (BackendError, ValidationError) as exc:
         await callback.message.answer(
             str(exc)
@@ -292,7 +305,37 @@ async def review_choice(callback: CallbackQuery, state: FSMContext, backend: Bac
             else "Could not save your request. Please try again shortly."
         )
     finally:
-        await callback.answer()
+        if not answered:
+            await callback.answer()
+
+
+async def send_live_search(
+    message: Message, request: BookRequestInput, merchant_search: MerchantSearchClient | None
+) -> None:
+    if merchant_search is None:
+        await message.answer("Live store search is unavailable right now. Try again shortly.")
+        return
+    result = await merchant_search.search(request)
+    if not result.matches:
+        detail = (
+            "Both store searches are temporarily unavailable."
+            if len(result.failed_stores) == 2
+            else "No matching in-stock listings were found at the approved stores."
+        )
+        await message.answer(f"{detail} Use Check store prices later to retry.")
+        return
+    lines = ["Live bookstore listings (book price only):", ""]
+    for match in result.matches:
+        lines.append(f"{match.merchant} — {match.title}\n{money(match.price_minor)} · {match.url}")
+    lines.extend(
+        [
+            "",
+            "Delivery charges and NTU arrival dates are not verified yet. These are listings, not group offers or final prices.",
+        ]
+    )
+    if result.failed_stores:
+        lines.append(f"Could not check: {', '.join(result.failed_stores)}.")
+    await message.answer("\n\n".join(lines))
 
 
 @requests.callback_query(RequestFlow.review, F.data.startswith("e:"))
@@ -381,8 +424,12 @@ async def review_text(message: Message, state: FSMContext, parser: BookRequestPa
 
 @requests.callback_query(F.data.startswith("q:"))
 async def request_action(
-    callback: CallbackQuery, state: FSMContext, backend: BackendClient
+    callback: CallbackQuery,
+    state: FSMContext,
+    backend: BackendClient,
+    merchant_search: MerchantSearchClient | None = None,
 ) -> None:
+    answered = False
     try:
         if not await callback_is_private(callback):
             return
@@ -391,6 +438,13 @@ async def request_action(
         if action == "cancel":
             await backend.cancel_book_request(callback.from_user.id, request_id)
             await callback.message.answer("Request cancelled.")
+        elif action == "search":
+            if not getattr(backend, "supports_live_search", False):
+                await callback.message.answer("Live store search is unavailable in this mode.")
+                return
+            await callback.answer()
+            answered = True
+            await send_live_search(callback.message, item, merchant_search)
         elif action == "edit":
             if not getattr(backend, "supports_update", True):
                 await callback.message.answer(
@@ -417,4 +471,5 @@ async def request_action(
             str(exc) if isinstance(exc, Conflict) else "This request isn't available to edit."
         )
     finally:
-        await callback.answer()
+        if not answered:
+            await callback.answer()

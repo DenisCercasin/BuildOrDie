@@ -15,7 +15,7 @@ STATUS_LABEL = {
     RequestStatus.GROUP_AVAILABLE: "Group offer available",
     RequestStatus.AWAITING_APPROVAL: "Awaiting final approval",
     RequestStatus.PAYMENT_PENDING: "Payment pending",
-    RequestStatus.ORDER_PLACED: "Order placed (demo)",
+    RequestStatus.ORDER_PLACED: "Order placed",
     RequestStatus.CANCELLED: "Cancelled",
     RequestStatus.EXPIRED: "Expired",
 }

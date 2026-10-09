@@ -164,7 +164,9 @@ async def myrequests(message: Message, backend: BackendClient, user_id: int | No
         await message.answer(
             request_line(item),
             reply_markup=request_actions(
-                item.request_id, getattr(backend, "supports_update", True)
+                item.request_id,
+                getattr(backend, "supports_update", True),
+                getattr(backend, "supports_live_search", False),
             ),
         )
 
