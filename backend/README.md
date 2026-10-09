@@ -75,7 +75,7 @@ Database transactions serialize SQLite mutations; PostgreSQL locks protect share
 
 ## Add your Reap sandbox key later
 
-Copy `.env.example` to `.env`, leave card fields out, and fill `REAP_API_KEY` privately. Set `PAYMENT_MODE=reap_sandbox`. Use a **fresh database** when switching payment modes; never mix mock authorizations with Reap groups. Fill `PUBLIC_BASE_URL` with your backend's URL for hosted redirects. Restart the server. See [Reap setup and findings](docs/REAP.md).
+Copy `.env.example` to `.env`, leave card fields out, and fill `REAP_API_KEY` privately. Set `PAYMENT_MODE=reap_sandbox`. Use a **fresh database** when switching payment modes; never mix mock authorizations with Reap groups. Set `PAYMENT_RETURN_URL` to an HTTPS return URL, such as `https://t.me/<your_bot_username>` for a local Telegram demo. Restart the server. See [Reap setup and findings](docs/REAP.md).
 
 Reap mode uses one designated purchaser. Other buyers approve allocations but are **not charged** by BookPool. A shared vault, escrow, separate buyer collection, split payment and automatic merchant refunds are not implemented or claimed. The Reap sandbox connector is tested against mocked provider responses; it still needs your sandbox key and a merchant/account smoke test.
 

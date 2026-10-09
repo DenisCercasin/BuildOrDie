@@ -162,6 +162,48 @@ def test_reap_http_contract_uses_sandbox_headers_and_exact_money():
         money_minor({"amount": "35", "currency": "USD"})
 
 
+def test_http_enrollment_return_is_rejected_before_provider_call(tmp_path):
+    client, _ = reap_client(tmp_path)
+    users, _, _, _, _ = setup_group(client)
+    response = client.post(f'/v1/users/{users[0]["id"]}/enrollments',
+                           headers={"Idempotency-Key": "enrollment-test"},
+                           json={"email": "demo@example.com", "return_url": "http://localhost:8000/payment-return"})
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "REAP_HTTPS_REQUIRED"
+
+
+def test_https_telegram_enrollment_is_persisted_and_reused(tmp_path):
+    class EnrollmentProvider(FakeReap):
+        calls = []
+
+        def create_enrollment(self, user_id, email, return_url, key):
+            self.calls.append((user_id, email, return_url, key))
+            return {"id": "enr-test", "status": "REQUIRES_ACTION",
+                    "nextAction": {"url": "https://sandbox.example/card-entry"}}
+
+    provider = EnrollmentProvider()
+    settings = Settings(database_url=f"sqlite:///{tmp_path}/enrollment.db", service_api_key=KEY,
+                        payment_mode="reap_sandbox", reap_api_key="test",
+                        payment_return_url="https://t.me/test_bot")
+    client = TestClient(create_app(settings, provider))
+    client.headers["Authorization"] = "Bearer " + KEY
+    users, _, _, _, _ = setup_group(client)
+    user_id = users[0]["id"]
+    provider.user_id = user_id
+    url = client.get('/health').json()['payment_return_url']
+    body = {"email": "demo@example.com", "return_url": url}
+    for invalid in ("https://t.me/another_bot", "https://t.me/test_bot?redirect=elsewhere"):
+        assert client.post(f'/v1/users/{user_id}/enrollments', headers={"Idempotency-Key": "stable"},
+                           json={**body, "return_url": invalid}).status_code == 422
+    first = client.post(f'/v1/users/{user_id}/enrollments', headers={"Idempotency-Key": "stable"}, json=body)
+    assert first.status_code == 200
+    assert first.json()['status'] == 'REQUIRES_ACTION'
+    second = client.post(f'/v1/users/{user_id}/enrollments', headers={"Idempotency-Key": "stable"}, json=body)
+    assert second.json()['status'] == 'ACTIVE'
+    assert len(provider.calls) == 1
+    assert provider.calls[0][2] == "https://t.me/test_bot"
+
+
 def test_production_mode_and_missing_secrets_rejected():
     with pytest.raises(ValueError):
         Settings(service_api_key="").validate()

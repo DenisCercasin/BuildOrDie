@@ -147,3 +147,66 @@ async def run_scenario(tmp_path):
     finally:
         await client.close()
         await admin.aclose()
+
+
+@pytest.mark.parametrize(
+    "status,url,error",
+    [
+        ("REQUIRES_ACTION", "https://sandbox.example/card-entry", None),
+        ("ACTIVE", None, None),
+        ("REQUIRES_ACTION", None, "not confirmed"),
+        ("REVOKED", None, "not confirmed"),
+    ],
+)
+def test_sandbox_card_setup_uses_https_and_checks_status(tmp_path, status, url, error):
+    from bookpool_bot.backend import BackendError
+
+    async def scenario():
+        observed = []
+
+        def respond(request):
+            if request.url.path == "/health":
+                return httpx.Response(
+                    200,
+                    json={
+                        "payment_mode": "reap_sandbox",
+                        "public_base_url": "http://localhost:8000",
+                        "payment_return_url": "https://t.me/test_bot",
+                    },
+                )
+            if request.url.path == "/v1/groups":
+                return httpx.Response(
+                    200, json=[{"purchaser_id": "user-1", "state": "EXPIRED"}]
+                )
+            import json
+
+            observed.append(
+                (json.loads(request.content), request.headers["Idempotency-Key"])
+            )
+            return httpx.Response(
+                200,
+                json={
+                    "status": status,
+                    "nextAction": {"url": url} if url else None,
+                },
+            )
+
+        client = TeamBackendClient("http://test", KEY, tmp_path / "state.json")
+        await client.client.aclose()
+        client.client = httpx.AsyncClient(
+            base_url="http://test", transport=httpx.MockTransport(respond)
+        )
+        client.user_ids[123] = "user-1"
+        try:
+            for _ in range(2):
+                if error:
+                    with pytest.raises(BackendError, match=error):
+                        await client.start_sandbox_enrollment(123)
+                else:
+                    assert await client.start_sandbox_enrollment(123) == (url or "")
+            assert observed[0] == observed[1]
+            assert observed[0][0]["return_url"] == "https://t.me/test_bot"
+        finally:
+            await client.close()
+
+    asyncio.run(scenario())

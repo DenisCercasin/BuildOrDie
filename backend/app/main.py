@@ -77,7 +77,8 @@ def create_app(settings=None, provider=None):
         with db.transaction() as s:
             s.execute(text("SELECT 1"))
         return {"status": "ok", "payment_mode": settings.payment_mode, "sandbox_only": True,
-                "public_base_url": settings.public_base_url}
+                "public_base_url": settings.public_base_url,
+                "payment_return_url": settings.hosted_return_url}
 
     @api.get("/", response_class=HTMLResponse, include_in_schema=False)
     def home():
@@ -341,9 +342,10 @@ def create_app(settings=None, provider=None):
         require_reap()
         owns(actor, user_id)
         target = urlparse(body.return_url)
-        public = urlparse(settings.public_base_url)
-        if (target.scheme, target.netloc) != (public.scheme, public.netloc) or target.username or target.password:
-            fail("RETURN_URL_NOT_ALLOWED", "Return URL must use this backend's configured public origin", 422)
+        if body.return_url != settings.hosted_return_url or target.username or target.password:
+            fail("RETURN_URL_NOT_ALLOWED", "Return URL must match the configured payment return URL", 422)
+        if target.scheme != "https":
+            fail("REAP_HTTPS_REQUIRED", "Reap card setup requires an HTTPS payment return URL. Update PAYMENT_RETURN_URL and restart the backend.", 422)
         with db.transaction() as s:
             user = row(s, User, user_id)
             existing_id = user.enrollment_id
@@ -535,7 +537,7 @@ def create_app(settings=None, provider=None):
             s.flush()
             order.checkout_payload = {
                 "quoteId": group.quote_id, "enrollmentId": enrollment_id,
-                "presentation": {"type": "REDIRECT", "returnUrl": settings.public_base_url + "/payment-return"}}
+                "presentation": {"type": "REDIRECT", "returnUrl": settings.hosted_return_url}}
             group.state = "CHECKOUT_PENDING"
             emit(s, "CHECKOUT_STARTED", group.id, order_id=order.id, provider=order.provider)
             order_id, payload, total = order.id, order.checkout_payload, order.total_minor

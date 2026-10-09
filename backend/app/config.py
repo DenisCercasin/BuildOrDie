@@ -11,6 +11,7 @@ class Settings:
     reap_base_url: str = "https://sg.sandbox.api.reap.global"
     reap_version: str = "2025-02-14"
     public_base_url: str = "http://localhost:8000"
+    payment_return_url: str = ""
     allowed_merchants: tuple[str, ...] = ("kinokuniya.com.sg", "popular.com.sg", "mossery.co")
 
     @classmethod
@@ -23,7 +24,12 @@ class Settings:
             reap_base_url=os.getenv("REAP_BASE_URL", cls.reap_base_url),
             reap_version=os.getenv("REAP_VERSION", cls.reap_version),
             public_base_url=os.getenv("PUBLIC_BASE_URL", cls.public_base_url).rstrip("/"),
+            payment_return_url=os.getenv("PAYMENT_RETURN_URL", ""),
         )
+
+    @property
+    def hosted_return_url(self):
+        return self.payment_return_url or self.public_base_url + "/payment-return"
 
     def validate(self):
         if len(self.service_api_key) < 24:

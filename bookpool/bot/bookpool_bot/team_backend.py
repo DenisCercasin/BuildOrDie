@@ -47,7 +47,7 @@ class TeamBackendClient(BackendClient):
         self.client = httpx.AsyncClient(
             base_url=base_url.rstrip("/"),
             headers={"Authorization": f"Bearer {api_key}"},
-            timeout=10,
+            timeout=30,
         )
         self.state_path = Path(state_path)
         saved = json.loads(self.state_path.read_text()) if self.state_path.exists() else {}
@@ -86,29 +86,38 @@ class TeamBackendClient(BackendClient):
         if health["payment_mode"] != "reap_sandbox":
             raise Conflict("The backend is currently running simulated checkout only.")
         groups = await self._request("GET", "/v1/groups", params={"limit": 500})
-        if not any(
-            group["purchaser_id"] == user_id and group["state"] in {"PROPOSED", "READY"}
-            for group in groups
-        ):
-            raise Conflict(
-                "Only the designated purchaser of an active group can set up the sandbox card."
-            )
+        if not any(group["purchaser_id"] == user_id for group in groups):
+            raise Conflict("Only a designated group purchaser can set up the sandbox card.")
         result = await self._request(
             "POST",
             f"/v1/users/{user_id}/enrollments",
-            headers={"Idempotency-Key": f"telegram-sandbox-{user_id}"},
+            headers={"Idempotency-Key": f"telegram-sandbox-https-{user_id}"},
             json={
                 "email": os.getenv("BOOKPOOL_PURCHASER_EMAIL", "bookpool.test@example.com"),
-                "return_url": health["public_base_url"].rstrip("/") + "/payment-return",
+                "return_url": health.get("payment_return_url")
+                or health["public_base_url"].rstrip("/") + "/payment-return",
             },
         )
-        return (result.get("nextAction") or {}).get("url") or ""
+        if result.get("status") == "ACTIVE":
+            return ""
+        url = (result.get("nextAction") or {}).get("url")
+        if result.get("status") == "REQUIRES_ACTION" and url:
+            return url
+        raise BackendError(
+            "Reap has not confirmed the card setup and supplied no card-entry link. "
+            "Please try /sandboxcard again; your card is not yet ready."
+        )
 
     async def _request(self, method: str, path: str, **kwargs):
         try:
             response = await self.client.request(method, path, **kwargs)
             if response.status_code in {403, 404}:
                 raise NotFound("This item is not available to you.")
+            if response.status_code == 502:
+                raise BackendError(
+                    "BookPool is running, but Reap could not complete this request. "
+                    "Please try again; if it persists, the Reap configuration needs checking."
+                )
             if response.status_code in {409, 410, 412, 422}:
                 detail = response.json().get("detail", {})
                 if isinstance(detail, dict):
