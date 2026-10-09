@@ -211,3 +211,93 @@ def test_production_mode_and_missing_secrets_rejected():
         Settings(service_api_key=KEY, payment_mode="reap_sandbox").validate()
     with pytest.raises(ValueError):
         Settings(service_api_key=KEY, reap_base_url="https://sg.prod.api.reap.global").validate()
+
+
+def test_approval_window_is_15_minutes_not_provider_expiry(tmp_path):
+    client, provider = reap_client(tmp_path)
+    _, group = prepare(client, provider)
+    remaining = datetime.fromisoformat(group['expires_at']) - datetime.now(timezone.utc)
+    assert timedelta(minutes=14, seconds=55) < remaining <= timedelta(minutes=15)
+
+
+def test_refresh_keeps_unchanged_consent_and_original_deadline(tmp_path):
+    client, provider = reap_client(tmp_path)
+    _, group = prepare(client, provider)
+    response = client.post(f'/v1/groups/{group["id"]}/reap-quote', json={
+        'version': group['version'], 'email': 'demo@example.com',
+        'preserve_approval_if_unchanged': True,
+    })
+    assert response.status_code == 200
+    refreshed = response.json()['group']
+    assert refreshed['state'] == 'READY'
+    assert refreshed['version'] == group['version']
+    assert refreshed['expires_at'] == group['expires_at']
+    assert all(p['approved_version'] == group['version'] and p['payment_state'] == 'AUTHORIZED'
+               for p in refreshed['participants'])
+
+
+def test_refresh_price_change_clears_consent(tmp_path):
+    client, provider = reap_client(tmp_path)
+    _, group = prepare(client, provider)
+    provider.total = 7600
+    response = client.post(f'/v1/groups/{group["id"]}/reap-quote', json={
+        'version': group['version'], 'email': 'demo@example.com',
+        'preserve_approval_if_unchanged': True,
+    })
+    assert response.status_code == 200
+    refreshed = response.json()['group']
+    assert refreshed['state'] == 'PROPOSED'
+    assert refreshed['version'] == group['version'] + 1
+    assert all(p['approved_version'] is None and p['payment_state'] == 'PENDING'
+               for p in refreshed['participants'])
+    assert not provider.checkouts
+
+
+def test_expired_approval_cannot_be_preserved(tmp_path):
+    client, provider = reap_client(tmp_path)
+    _, group = prepare(client, provider)
+    with client.app.state.db.transaction(write=True) as s:
+        s.get(Group, group['id']).expires_at = dt(minutes=-1)
+    response = client.post(f'/v1/groups/{group["id"]}/reap-quote', json={
+        'version': group['version'], 'email': 'demo@example.com',
+        'preserve_approval_if_unchanged': True,
+    })
+    assert response.status_code == 409
+    assert response.json()['detail']['code'] == 'PROPOSAL_EXPIRED'
+    assert not provider.checkouts
+
+
+def test_worker_refreshes_expired_provider_quote_before_one_checkout(tmp_path):
+    import asyncio
+    from bookpool.orchestrator.worker import GroupWorker
+
+    client, provider = reap_client(tmp_path)
+    _, group = prepare(client, provider)
+    original_get = provider.get_quote
+    original_create = provider.create_quote
+    provider.get_quote = lambda ident: {**original_get(ident), 'expiresAt': dt(minutes=-1)}
+
+    def refresh(*args):
+        provider.get_quote = original_get
+        return original_create(*args)
+
+    provider.create_quote = refresh
+
+    async def scenario():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=client.app),
+                                     base_url='http://test',
+                                     headers={'Authorization': 'Bearer ' + KEY}) as api:
+            worker = GroupWorker('http://test', KEY, client=api, purchaser_email='demo@example.com')
+            worker.payment_mode = 'reap_sandbox'
+            try:
+                await worker._execute_ready()
+                assert not provider.checkouts
+                refreshed = (await api.get(f'/v1/groups/{group["id"]}')).json()
+                assert refreshed['state'] == 'READY'
+                assert refreshed['version'] == group['version']
+                await worker._execute_ready()
+                assert len(provider.checkouts) == 1
+            finally:
+                await worker.close()
+
+    asyncio.run(scenario())

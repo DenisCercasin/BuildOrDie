@@ -382,11 +382,15 @@ def create_app(settings=None, provider=None):
     @api.post("/v1/groups/{group_id}/reap-quote", tags=["Reap Sandbox"])
     def quote_group(group_id: str, body: QuoteIn, _=Depends(service)):
         require_reap()
+        if body.preserve_approval_if_unchanged and (body.offer_code or body.shipping_option_id):
+            fail("QUOTE_TERMS_CHANGED", "Changing quote options requires fresh approval", 422)
         with db.transaction() as s:
             group = row(s, Group, group_id)
             version(group, body.version)
             if group.state not in {"PROPOSED", "READY"}:
                 fail("INVALID_STATE", "Cannot quote after checkout begins")
+            if body.preserve_approval_if_unchanged and not future(group.expires_at):
+                fail("PROPOSAL_EXPIRED", "The approval window has expired")
             if not group.shipping_address:
                 fail("ADDRESS_REQUIRED", "Reap quote needs the shared Singapore shipping address", 422)
             ps = participants(s, group.id)
@@ -417,9 +421,16 @@ def create_app(settings=None, provider=None):
             version(group, body.version)
             if group.state not in {"PROPOSED", "READY"}:
                 fail("INVALID_STATE", "Group changed during quote creation")
+            if body.preserve_approval_if_unchanged and not future(group.expires_at):
+                fail("PROPOSAL_EXPIRED", "The approval window expired during quote creation")
             ps = participants(s, group.id)
             shares = allocate(total, [p.amount_minor for p in ps])
-            expiries = [expiry]
+            unchanged = (body.preserve_approval_if_unchanged and group.quote_id
+                         and total == group.total_minor
+                         and shares == [p.amount_minor for p in ps])
+            # User consent lasts 15 minutes; provider validity is checked separately at execution.
+            expiries = [timestamp(group.expires_at) if unchanged else
+                        datetime.now(timezone.utc) + timedelta(minutes=15)]
             for p, share in zip(ps, shares):
                 req = row(s, BookRequest, p.request_id)
                 offer = row(s, Offer, p.offer_id)
@@ -430,8 +441,10 @@ def create_app(settings=None, provider=None):
             group.total_minor = total
             group.expires_at = min(expiries).isoformat()
             group.quote_id = quote_id
-            invalidate(s, group, "REAP_QUOTE_READY")
-            # Clear consent even when price did not change: new quote = new version.
+            if unchanged:
+                emit(s, "REAP_QUOTE_REFRESHED", group.id, version=group.version)
+            else:
+                invalidate(s, group, "REAP_QUOTE_READY")
             return {"group": group_view(s, group), "shipping_options": result.get("shippingOptions", []),
                     "amount_breakdown": result["amountBreakdown"]}
 

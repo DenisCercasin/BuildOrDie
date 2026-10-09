@@ -105,6 +105,7 @@ class ExecuteIn(VersionIn):
 
 
 class QuoteIn(VersionIn):
+    preserve_approval_if_unchanged: bool = False
     email: Annotated[str, Field(pattern=r"^[^\s@]+@[^\s@]+\.[^\s@]+$", max_length=254)]
     offer_code: Annotated[str, Field(min_length=1, max_length=128)] | None = None
     shipping_option_id: Id | None = None

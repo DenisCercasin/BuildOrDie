@@ -162,7 +162,8 @@ class GroupWorker:
             if offer["source"]
             == ("reap" if self.payment_mode == "reap_sandbox" else "merchant")
             and offer["available"]
-            and datetime.fromisoformat(offer["expires_at"]) > now
+            and datetime.fromisoformat(offer["expires_at"])
+            > now + timedelta(minutes=15)
             and datetime.fromisoformat(offer["delivery_at"])
             <= datetime.fromisoformat(request["latest_delivery_at"])
         ]
@@ -321,7 +322,7 @@ class GroupWorker:
                 for p in proposal.participants
             ]
             expiry = min(
-                [now + timedelta(minutes=20)]
+                [now + timedelta(minutes=15)]
                 + [
                     datetime.fromisoformat(o["expires_at"])
                     for o in all_offers
@@ -412,8 +413,30 @@ class GroupWorker:
                         json={"version": group["version"]},
                     )
                     log.info("order state=%s id=%s", order["state"], order["id"])
-                except httpx.HTTPStatusError:
-                    log.exception("group_execution_failed group_id=%s", group["id"])
+                except httpx.HTTPStatusError as exc:
+                    detail = exc.response.json().get("detail", {})
+                    if (
+                        self.payment_mode == "reap_sandbox"
+                        and isinstance(detail, dict)
+                        and detail.get("code") == "QUOTE_EXPIRED"
+                    ):
+                        try:
+                            await self.api(
+                                "POST",
+                                f"/v1/groups/{group['id']}/reap-quote",
+                                json={
+                                    "version": group["version"],
+                                    "email": self.purchaser_email,
+                                    "preserve_approval_if_unchanged": True,
+                                },
+                            )
+                            log.info("reap_quote_refreshed group_id=%s", group["id"])
+                        except httpx.HTTPStatusError:
+                            log.exception(
+                                "reap_quote_refresh_failed group_id=%s", group["id"]
+                            )
+                    else:
+                        log.exception("group_execution_failed group_id=%s", group["id"])
             elif group["state"] in {
                 "CHECKOUT_PENDING",
                 "PAYMENT_UNKNOWN",
